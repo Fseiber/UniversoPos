@@ -8,3 +8,8 @@ coverage/
 .demo/
 .imports/
 *.log
+.postgres/
+.env.*.local
+.legacy-git-catalog/
+*.dump
+*.dump.partial

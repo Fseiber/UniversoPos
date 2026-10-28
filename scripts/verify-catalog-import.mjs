@@ -1,3 +1,4 @@
+// Verificación histórica del catálogo SQLite previo al traslado; no comprueba PostgreSQL.
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";

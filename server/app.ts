@@ -2,7 +2,7 @@ import express from "express";
 import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
 import { z, ZodError } from "zod";
-import { audit, db, D, ensure, Problem } from "./db.js";
+import { audit, db, D, ensure, Problem, transaction } from "./db.js";
 import {
   admin,
   authenticate,
@@ -79,7 +79,7 @@ app.post("/api/setup", loginLimit, async (req, res) => {
     .object({ name: z.string().trim().min(2).max(80), pin: pinSchema })
     .parse(req.body);
   const pinHash = await hashPin(data.pin);
-  const employee = await db.$transaction(async (tx) => {
+  const employee = await transaction(async (tx) => {
     ensure(
       (await tx.employee.count()) === 0,
       "El sistema ya está configurado",
@@ -139,7 +139,7 @@ app.post("/api/employees", admin, async (req, res) => {
     })
     .parse(req.body);
   const pinHash = await hashPin(data.pin);
-  const employee = await db.$transaction(async (tx) => {
+  const employee = await transaction(async (tx) => {
     const e = await tx.employee.create({
       data: { name: data.name, role: data.role, pinHash },
     });
@@ -163,7 +163,7 @@ app.patch("/api/employees/:id", admin, async (req, res) => {
     employeeId !== res.locals.employee.id || data.active !== false,
     "No podés desactivar tu propio acceso",
   );
-  await db.$transaction(async (tx) => {
+  await transaction(async (tx) => {
     const old = await tx.employee.findUniqueOrThrow({
       where: { id: employeeId },
     });
@@ -235,7 +235,7 @@ app.post("/api/products", admin, async (req, res) => {
     "El stock de unidades debe ser entero",
   );
   const { stock, ...fields } = data;
-  const product = await db.$transaction(async (tx) => {
+  const product = await transaction(async (tx) => {
     await ensureBarcodeAvailable(tx, data.barcode);
     const p = await tx.product.create({
       data: { ...fields, barcode: data.barcode || null },
@@ -285,7 +285,7 @@ app.post("/api/imported-products/:id/activate", admin, async (req, res) => {
 app.put("/api/products/:id", admin, async (req, res) => {
   const productId = id.parse(req.params.id);
   const data = productInput.parse(req.body);
-  await db.$transaction(async (tx) => {
+  await transaction(async (tx) => {
     const old = await tx.product.findUniqueOrThrow({
       where: { id: productId },
     });
@@ -317,7 +317,7 @@ app.put("/api/products/:id", admin, async (req, res) => {
 });
 app.delete("/api/products/:id", admin, async (req, res) => {
   const productId = id.parse(req.params.id);
-  await db.$transaction(async (tx) => {
+  await transaction(async (tx) => {
     await tx.product.update({
       where: { id: productId },
       data: { active: false },
@@ -351,7 +351,7 @@ app.post("/api/products/:id/stock", admin, async (req, res) => {
       reason: z.string().trim().min(3).max(160),
     })
     .parse(req.body);
-  await db.$transaction(async (tx) => {
+  await transaction(async (tx) => {
     ensure(
       data.mode !== "SET" || data.quantity >= 0,
       "El stock contado no puede ser negativo",
@@ -409,7 +409,7 @@ app.post("/api/customers", async (req, res) => {
     "El administrador debe asignar el límite de crédito",
     403,
   );
-  const customer = await db.$transaction(async (tx) => {
+  const customer = await transaction(async (tx) => {
     const c = await tx.customer.create({ data });
     await audit(
       tx,
@@ -431,7 +431,7 @@ app.patch("/api/customers/:id", admin, async (req, res) => {
     })
     .parse(req.body);
   const customerId = id.parse(req.params.id);
-  await db.$transaction(async (tx) => {
+  await transaction(async (tx) => {
     const c = await tx.customer.findUniqueOrThrow({
       where: { id: customerId },
     });
@@ -485,7 +485,7 @@ app.get("/api/customers/:id/statement.pdf", async (req, res) => {
 app.post("/api/customers/:id/payments", async (req, res) => {
   const customerId = id.parse(req.params.id);
   const data = z.object({ amount: money.refine((v) => v > 0) }).parse(req.body);
-  await db.$transaction(async (tx) => {
+  await transaction(async (tx) => {
     const shift = await currentShift(tx);
     const customer = await tx.customer.findUniqueOrThrow({
       where: { id: customerId },
@@ -523,14 +523,14 @@ app.get("/api/shift", async (_req, res) => {
     shift
       ? {
           ...shift,
-          expected: await db.$transaction((tx) => expectedCash(tx, shift.id)),
+          expected: await transaction((tx) => expectedCash(tx, shift.id)),
         }
       : null,
   );
 });
 app.post("/api/shifts/open", async (req, res) => {
   const data = z.object({ opening: money }).parse(req.body);
-  const shift = await db.$transaction(async (tx) => {
+  const shift = await transaction(async (tx) => {
     ensure(
       (await tx.shift.count({ where: { closedAt: null } })) === 0,
       "Ya hay una caja abierta",
@@ -553,7 +553,7 @@ app.post("/api/shifts/open", async (req, res) => {
 });
 app.post("/api/shifts/close", async (req, res) => {
   const data = z.object({ declared: money }).parse(req.body);
-  const shift = await db.$transaction(async (tx) => {
+  const shift = await transaction(async (tx) => {
     const current = await currentShift(tx);
     const expected = await expectedCash(tx, current.id);
     const difference = new D(data.declared).minus(expected);
@@ -586,7 +586,7 @@ app.post("/api/cash-movements", async (req, res) => {
       reason: z.string().trim().min(3).max(160),
     })
     .parse(req.body);
-  await db.$transaction(async (tx) => {
+  await transaction(async (tx) => {
     const shift = await currentShift(tx);
     const amount = new D(data.amount).mul(
       data.direction === "INGRESO" ? 1 : -1,
@@ -731,6 +731,13 @@ app.use(
           .join("; "),
       });
     const code = (error as { code?: string })?.code;
+    if (code === "P2034")
+      return res
+        .status(409)
+        .json({
+          error:
+            "Otra caja actualizó estos datos al mismo tiempo. Volvé a intentar; esta operación no se guardó",
+        });
     if (code === "P2002")
       return res
         .status(409)

@@ -1,0 +1,3 @@
+#!/bin/sh
+# PostgreSQL es la fuente de datos. Git solo versiona código y migraciones.
+exit 0

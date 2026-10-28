@@ -10,14 +10,11 @@ No cierres el proceso mientras se confirma una operación. Para detenerlo desde 
 
 ## Recuperar un respaldo
 
-1. Detené todos los servidores del comercio. El proceso de demostración usa otra base, pero también conviene cerrarlo para evitar confusiones.
-2. Conservá una copia de la carpeta actual `prisma/` completa, incluyendo `universo.db`, `universo.db-wal` y `universo.db-shm` si existen. No borres ni reemplaces archivos con el servidor en ejecución.
-3. Elegí un respaldo confirmado y revisá su fecha. La recuperación reemplaza el estado actual por el de esa fecha; las operaciones posteriores no están incluidas.
-4. En una carpeta de recuperación independiente, copiá el respaldo con nombre `universo.db`. Configurá `DATABASE_URL` con la ruta absoluta de ese archivo, por ejemplo `file:C:/Datos/Recuperacion/universo.db`. Esta estrategia conserva intacta la base anterior y evita mezclar un respaldo con archivos WAL antiguos.
-5. Con el servidor detenido, ejecutá `npm run setup` para aplicar migraciones posteriores al respaldo, si las hubiera. Luego iniciá con `npm start`.
-6. Ingresá, ejecutá Configuración → Reconciliar y verificá clientes, stock y cierres. Compará con el último comprobante del día. Generá un respaldo nuevo antes de retomar ventas.
-
-El respaldo contiene sesiones que existían al crearlo; después de recuperar, cambiá los PIN desde Configuración para revocar las sesiones de esos empleados. Guardá los PIN nuevos fuera de esta documentación.
+La aplicación usa PostgreSQL y respaldos `.dump` generados con `pg_dump`. Conservar
+la base actual y restaurar en una base vacía distinta con `pg_restore`. El detalle
+de comandos, comprobaciones y revocación de sesiones está en
+[PostgreSQL: respaldos y recuperación](POSTGRESQL.md#respaldos-y-recuperación).
+No copiar archivos SQLite sobre PostgreSQL ni importar SQLite en cada arranque.
 
 ## Configurar el visor Mercado Pago
 

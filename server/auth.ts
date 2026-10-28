@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { compare, hash } from "bcryptjs";
 import type { RequestHandler } from "express";
 import { z } from "zod";
-import { audit, db, ensure } from "./db.js";
+import { audit, db, ensure, transaction } from "./db.js";
 
 export const pinSchema = z
   .string()
@@ -14,7 +14,7 @@ export async function verifyPin(
   pin: string,
   adminOnly = false,
 ) {
-  const result = await db.$transaction(async (tx) => {
+  const result = await transaction(async (tx) => {
     const employee = await tx.employee.findUnique({
       where: { id: employeeId },
     });

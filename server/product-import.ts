@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { db, D, audit, ensure, type Tx } from "./db.js";
+import { db, D, audit, ensure, type Tx, transaction } from "./db.js";
 import { money, moveStock, optionalMoney } from "./services.js";
 import { ensureBarcodeAvailable } from "./barcodes.js";
 
@@ -67,7 +67,7 @@ async function planImport(tx: Tx, data: z.infer<typeof catalogImportInput>) {
 
 export async function importCatalog(source: unknown, apply = false) {
   const data = catalogImportInput.parse(source);
-  return db.$transaction(
+  return transaction(
     async (tx) => {
       const plan = await planImport(tx, data);
       if (plan.previous)
@@ -173,7 +173,7 @@ export async function activateImportedProduct(
   employeeId: number,
 ) {
   const data = activateImportedInput.parse(source);
-  return db.$transaction(async (tx) => {
+  return transaction(async (tx) => {
     const item = await tx.importedProduct.findUniqueOrThrow({
       where: { id: itemId },
     });

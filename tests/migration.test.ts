@@ -7,7 +7,7 @@ import path from "node:path";
 test("Migración · costo opcional conserva ventas, importaciones vinculadas y restricciones", () => {
   const sqlite = new DatabaseSync(":memory:");
   try {
-    const names = readdirSync("prisma/migrations")
+    const names = readdirSync("prisma/legacy-sqlite/migrations")
       .filter((n) => !n.endsWith(".toml"))
       .sort();
     for (const name of names.filter(
@@ -15,7 +15,7 @@ test("Migración · costo opcional conserva ventas, importaciones vinculadas y r
     ))
       sqlite.exec(
         readFileSync(
-          path.join("prisma/migrations", name, "migration.sql"),
+          path.join("prisma/legacy-sqlite/migrations", name, "migration.sql"),
           "utf8",
         ),
       );
@@ -31,7 +31,7 @@ test("Migración · costo opcional conserva ventas, importaciones vinculadas y r
     const migration = names.find((n) => n.endsWith("optional_purchase_cost"))!;
     sqlite.exec(
       readFileSync(
-        path.join("prisma/migrations", migration, "migration.sql"),
+        path.join("prisma/legacy-sqlite/migrations", migration, "migration.sql"),
         "utf8",
       ),
     );

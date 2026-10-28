@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { db, D, ensure } from "./db.js";
+import { db, D, ensure, transaction } from "./db.js";
 import type {
   AccountPurchase,
   CustomerStatement,
@@ -31,7 +31,7 @@ export async function customerStatement(
   const to = query.to
     ? new Date(new Date(`${query.to}T00:00:00-03:00`).getTime() + 86400_000)
     : undefined;
-  return db.$transaction(async (tx) => {
+  return transaction(async (tx) => {
     const customer = await tx.customer.findUnique({
       where: { id: customerId },
     });

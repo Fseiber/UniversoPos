@@ -10,26 +10,20 @@ import {
   utimes,
 } from "node:fs/promises";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { postgresFixture } from "./postgres-fixture.js";
+import {
+  postgresTool,
+  postgresEnvironment,
+  runFile,
+} from "../scripts/postgres-tools.js";
 import request from "supertest";
 import { randomUUID } from "node:crypto";
 
 await mkdir(".test-data", { recursive: true });
 const dir = await mkdtemp(path.resolve(".test-data/run-"));
-const dbPath = path.join(dir, "test.db");
-process.env.DATABASE_URL = `file:${dbPath.replace(/\\/g, "/")}`;
+const fixture = await postgresFixture();
+process.env.DATABASE_URL = fixture.url;
 process.env.BACKUP_DIR = path.join(dir, "backups");
-const sqlite = new DatabaseSync(dbPath);
-for (const name of (await readdir("prisma/migrations")).sort()) {
-  if (name.endsWith(".toml")) continue;
-  sqlite.exec(
-    await readFile(
-      path.join("prisma/migrations", name, "migration.sql"),
-      "utf8",
-    ),
-  );
-}
-sqlite.close();
 const { app } = await import("../server/app.js");
 const { db, initializeDatabase } = await import("../server/db.js");
 const { report } = await import("../server/management.js");
@@ -1036,7 +1030,74 @@ await test("Stock · reemplaza cantidades temporales sin sumar dos veces y conse
   assert.equal((await admin.get("/api/reconcile")).body.ok, true);
 });
 
-await test("F5 · restricciones de integridad también en SQLite", async () => {
+await test("PostgreSQL · ventas simultáneas conservan stock, fiado e idempotencia", async () => {
+  const product = await admin
+    .post("/api/products")
+    .send({ name: "Última unidad concurrente", price: 50, stock: 1 })
+    .expect(201);
+  const results = await Promise.all(
+    [1, 2].map(() =>
+      worker
+        .post("/api/sales")
+        .send(
+          order(
+            [{ productId: product.body.id, quantity: 1 }],
+            [{ method: "EFECTIVO", amount: 50 }],
+          ),
+        ),
+    ),
+  );
+  assert.deepEqual(results.map((r) => r.status).sort(), [201, 400].sort());
+  assert.equal(
+    Number(
+      (await db.product.findUniqueOrThrow({ where: { id: product.body.id } }))
+        .stock,
+    ),
+    0,
+  );
+  assert.equal(
+    await db.saleLine.count({ where: { productId: product.body.id } }),
+    1,
+  );
+  const customer = await admin
+    .post("/api/customers")
+    .send({ name: "Crédito concurrente", creditLimit: 100 })
+    .expect(201);
+  const credit = await Promise.all(
+    [1, 2].map(() =>
+      worker
+        .post("/api/sales")
+        .send(
+          order([], [{ method: "CUENTA_CORRIENTE", amount: 75 }], {
+            quickAmount: 75,
+            customerId: customer.body.id,
+          }),
+        ),
+    ),
+  );
+  assert.deepEqual(credit.map((r) => r.status).sort(), [201, 400].sort());
+  assert.equal(
+    Number(
+      (await db.customer.findUniqueOrThrow({ where: { id: customer.body.id } }))
+        .balance,
+    ),
+    75,
+  );
+  const payload = order([], [{ method: "EFECTIVO", amount: 25 }], {
+    quickAmount: 25,
+  });
+  const repeated = await Promise.all(
+    [1, 2].map(() => worker.post("/api/sales").send(payload)),
+  );
+  assert.ok(repeated.every((r) => r.status === 201));
+  assert.equal(repeated[0].body.id, repeated[1].body.id);
+  assert.equal(
+    await db.sale.count({ where: { requestKey: payload.requestKey } }),
+    1,
+  );
+  assert.equal((await admin.get("/api/reconcile")).body.ok, true);
+});
+await test("F5 · restricciones de integridad también en PostgreSQL", async () => {
   await assert.rejects(
     db.product.update({ where: { id: productId }, data: { stock: -1 } }),
   );
@@ -1054,7 +1115,7 @@ await test("F5 · restricciones de integridad también en SQLite", async () => {
 await test("F5 · rotación de backups elimina solo copias propias vencidas", async () => {
   const old = path.join(
     process.env.BACKUP_DIR!,
-    "universo-2020-01-01T00-00-00-000Z.db",
+    "universo-2020-01-01T00-00-00-000Z.dump",
   );
   const unrelated = path.join(
     process.env.BACKUP_DIR!,
@@ -1096,19 +1157,44 @@ await test("F5 · reconciliación, respaldo consistente, cierre y persistencia",
     .expect(200);
   assert.equal(Number(closed.body.difference), 0);
   const backup = await admin.post("/api/backups").expect(200);
-  const restored = new DatabaseSync(
-    path.join(process.env.BACKUP_DIR!, backup.body.file),
-    { readOnly: true },
+  const dump = path.join(process.env.BACKUP_DIR!, backup.body.file);
+  const exported = path.join(dir, "restore.sql");
+  await runFile(
+    postgresTool("pg_restore"),
+    ["--no-owner", "--no-acl", "--file", exported, dump],
+    { windowsHide: true },
   );
-  assert.equal(
-    (restored.prepare("PRAGMA integrity_check").get() as any).integrity_check,
-    "ok",
+  const restoredSchema = `${fixture.schema}_restored`;
+  await writeFile(
+    exported,
+    (await readFile(exported, "utf8")).replaceAll(
+      fixture.schema,
+      restoredSchema,
+    ),
   );
-  assert.equal(
-    (restored.prepare("SELECT COUNT(*) AS n FROM Sale").get() as any).n,
-    await db.sale.count(),
-  );
-  restored.close();
+  try {
+    await runFile(
+      postgresTool("psql"),
+      [
+        "-X",
+        "--no-password",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "--single-transaction",
+        "-f",
+        exported,
+      ],
+      { env: postgresEnvironment(fixture.url), windowsHide: true },
+    );
+    const count = await db.$queryRawUnsafe<{ n: bigint }[]>(
+      `SELECT COUNT(*) AS n FROM "${restoredSchema}"."Sale"`,
+    );
+    assert.equal(Number(count[0].n), await db.sale.count());
+  } finally {
+    await db.$executeRawUnsafe(
+      `DROP SCHEMA IF EXISTS "${restoredSchema}" CASCADE`,
+    );
+  }
   await db.$disconnect();
   assert.ok((await db.sale.count()) > 0);
   await worker.post("/api/logout").expect(200);
@@ -1116,6 +1202,7 @@ await test("F5 · reconciliación, respaldo consistente, cierre y persistencia",
 });
 after(async () => {
   await db.$disconnect();
+  await fixture.dispose();
   await rm(dir, {
     recursive: true,
     force: true,

@@ -1,33 +1,11 @@
 import "dotenv/config";
-import { mkdir, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
-await mkdir(".demo", { recursive: true });
-const file = path.resolve(".demo/demo-v1.db");
-process.env.DATABASE_URL = `file:${file.replace(/\\/g, "/")}`;
+import { prepareDemoDatabase } from "./demo-database.js";
+process.env.DATABASE_URL = await prepareDemoDatabase();
 process.env.BACKUP_DIR = path.resolve(".demo/backups");
 process.env.PORT = "3002";
 process.env.HOST = "127.0.0.1";
 process.env.DEMO_MODE = "true";
-const sqlite = new DatabaseSync(file);
-sqlite.exec(
-  "CREATE TABLE IF NOT EXISTS _demo_migrations (name TEXT PRIMARY KEY)",
-);
-for (const name of (await readdir("prisma/migrations")).sort()) {
-  if (
-    name.endsWith(".toml") ||
-    sqlite.prepare("SELECT name FROM _demo_migrations WHERE name = ?").get(name)
-  )
-    continue;
-  sqlite.exec(
-    await readFile(
-      path.join("prisma/migrations", name, "migration.sql"),
-      "utf8",
-    ),
-  );
-  sqlite.prepare("INSERT INTO _demo_migrations (name) VALUES (?)").run(name);
-}
-sqlite.close();
 const { db, D } = await import("../server/db.js");
 if ((await db.employee.count()) === 0) {
   const { hashPin } = await import("../server/auth.js");

@@ -1,6 +1,7 @@
+import { demoConnection } from "./demo-database.js";
 import path from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
-process.env.DATABASE_URL = `file:${path.resolve(".demo/demo-v1.db").replace(/\\/g, "/")}`;
+process.env.DATABASE_URL = demoConnection();
 const { db, ensure } = await import("../server/db.js");
 const { createSale, saleInput } = await import("../server/services.js");
 const { customerStatement } = await import("../server/customer-statement.js");
@@ -12,7 +13,8 @@ try {
     where: { role: "ADMIN", name: { startsWith: "Demo" } },
   });
   ensure(
-    process.env.DATABASE_URL.includes("/.demo/"),
+    new URL(process.env.DATABASE_URL).searchParams.get("schema") ===
+      "universo_demo",
     "Este script solo funciona sobre la base de demostración",
   );
   let customer = await db.customer.findFirst({

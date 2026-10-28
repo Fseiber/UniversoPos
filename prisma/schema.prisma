@@ -3,22 +3,22 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
 model Employee {
-  id           Int       @id @default(autoincrement())
-  name         String
-  pinHash      String
-  role         String
-  active       Boolean   @default(true)
-  failures     Int       @default(0)
-  lockedUntil  DateTime?
-  sessions     Session[]
-  shifts       Shift[]
-  sales        Sale[]
-  createdAt    DateTime  @default(now())
+  id          Int       @id @default(autoincrement())
+  name        String
+  pinHash     String
+  role        String
+  active      Boolean   @default(true)
+  failures    Int       @default(0)
+  lockedUntil DateTime?
+  sessions    Session[]
+  shifts      Shift[]
+  sales       Sale[]
+  createdAt   DateTime  @default(now())
 }
 
 model Session {
@@ -29,93 +29,93 @@ model Session {
 }
 
 model Product {
-  id          Int             @id @default(autoincrement())
-  name        String
-  barcode     String?         @unique
-  category    String          @default("General")
-  unit        String          @default("UNIDAD")
-  cost        Decimal?
-  price       Decimal
-  stock       Decimal         @default(0)
-  minimum     Decimal         @default(0)
-  active      Boolean         @default(true)
-  lines       SaleLine[]
-  movements   StockMovement[]
-  rules       PriceRule[]
-  offers      SupplierOffer[]
-  importItem  ImportedProduct?
-  createdAt   DateTime        @default(now())
+  id         Int              @id @default(autoincrement())
+  name       String
+  barcode    String?          @unique
+  category   String           @default("General")
+  unit       String           @default("UNIDAD")
+  cost       Decimal?         @db.Decimal(18, 2)
+  price      Decimal          @db.Decimal(18, 2)
+  stock      Decimal          @default(0) @db.Decimal(18, 3)
+  minimum    Decimal          @default(0) @db.Decimal(18, 3)
+  active     Boolean          @default(true)
+  lines      SaleLine[]
+  movements  StockMovement[]
+  rules      PriceRule[]
+  offers     SupplierOffer[]
+  importItem ImportedProduct?
+  createdAt  DateTime         @default(now())
 }
 
 model Customer {
   id          Int               @id @default(autoincrement())
   name        String
   phone       String            @default("")
-  creditLimit Decimal           @default(0)
-  balance     Decimal           @default(0)
+  creditLimit Decimal           @default(0) @db.Decimal(18, 2)
+  balance     Decimal           @default(0) @db.Decimal(18, 2)
   active      Boolean           @default(true)
   movements   AccountMovement[]
   sales       Sale[]
 }
 
 model Shift {
-  id          Int            @id @default(autoincrement())
-  employeeId  Int
-  employee    Employee       @relation(fields: [employeeId], references: [id])
-  opening     Decimal
-  openedAt    DateTime       @default(now())
-  closedAt    DateTime?
-  declared    Decimal?
-  expected    Decimal?
-  difference  Decimal?
-  sales       Sale[]
-  movements   CashMovement[]
-  accounts    AccountMovement[]
+  id         Int               @id @default(autoincrement())
+  employeeId Int
+  employee   Employee          @relation(fields: [employeeId], references: [id])
+  opening    Decimal           @db.Decimal(18, 2)
+  openedAt   DateTime          @default(now())
+  closedAt   DateTime?
+  declared   Decimal?          @db.Decimal(18, 2)
+  expected   Decimal?          @db.Decimal(18, 2)
+  difference Decimal?          @db.Decimal(18, 2)
+  sales      Sale[]
+  movements  CashMovement[]
+  accounts   AccountMovement[]
 }
 
 model Sale {
-  id            Int         @id @default(autoincrement())
-  requestKey    String      @unique
-  requestHash   String      @default("")
-  employeeId    Int
-  employee      Employee    @relation(fields: [employeeId], references: [id])
-  shiftId       Int
-  shift         Shift       @relation(fields: [shiftId], references: [id])
-  customerId    Int?
-  customer      Customer?   @relation(fields: [customerId], references: [id])
-  pendingName   String?
-  status        String      @default("COMPLETADA")
-  subtotal      Decimal
-  surcharge     Decimal     @default(0)
-  total         Decimal
-  quickAmount   Decimal     @default(0)
-  createdAt     DateTime    @default(now())
-  voidedAt      DateTime?
-  voidReason    String?
-  lines         SaleLine[]
-  payments      Payment[]
+  id          Int        @id @default(autoincrement())
+  requestKey  String     @unique
+  requestHash String     @default("")
+  employeeId  Int
+  employee    Employee   @relation(fields: [employeeId], references: [id])
+  shiftId     Int
+  shift       Shift      @relation(fields: [shiftId], references: [id])
+  customerId  Int?
+  customer    Customer?  @relation(fields: [customerId], references: [id])
+  pendingName String?
+  status      String     @default("COMPLETADA")
+  subtotal    Decimal    @db.Decimal(18, 2)
+  surcharge   Decimal    @default(0) @db.Decimal(18, 2)
+  total       Decimal    @db.Decimal(18, 2)
+  quickAmount Decimal    @default(0) @db.Decimal(18, 2)
+  createdAt   DateTime   @default(now())
+  voidedAt    DateTime?
+  voidReason  String?
+  lines       SaleLine[]
+  payments    Payment[]
 }
 
 model SaleLine {
-  id          Int     @id @default(autoincrement())
-  saleId      Int
-  sale        Sale    @relation(fields: [saleId], references: [id])
-  productId   Int
-  product     Product @relation(fields: [productId], references: [id])
-  name        String
-  quantity    Decimal
-  unitPrice   Decimal
-  unitCost    Decimal?
-  total       Decimal
+  id        Int      @id @default(autoincrement())
+  saleId    Int
+  sale      Sale     @relation(fields: [saleId], references: [id])
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id])
+  name      String
+  quantity  Decimal  @db.Decimal(18, 3)
+  unitPrice Decimal  @db.Decimal(18, 2)
+  unitCost  Decimal? @db.Decimal(18, 2)
+  total     Decimal  @db.Decimal(18, 2)
 }
 
 model Payment {
-  id       Int     @id @default(autoincrement())
-  saleId   Int
-  sale     Sale    @relation(fields: [saleId], references: [id])
-  method   String
-  amount   Decimal
-  shiftId  Int
+  id        Int      @id @default(autoincrement())
+  saleId    Int
+  sale      Sale     @relation(fields: [saleId], references: [id])
+  method    String
+  amount    Decimal  @db.Decimal(18, 2)
+  shiftId   Int
   createdAt DateTime @default(now())
 }
 
@@ -123,7 +123,7 @@ model StockMovement {
   id         Int      @id @default(autoincrement())
   productId  Int
   product    Product  @relation(fields: [productId], references: [id])
-  quantity   Decimal
+  quantity   Decimal  @db.Decimal(18, 3)
   reason     String
   saleId     Int?
   employeeId Int
@@ -134,7 +134,7 @@ model AccountMovement {
   id         Int      @id @default(autoincrement())
   customerId Int
   customer   Customer @relation(fields: [customerId], references: [id])
-  amount     Decimal
+  amount     Decimal  @db.Decimal(18, 2)
   kind       String
   saleId     Int?
   shiftId    Int?
@@ -147,7 +147,7 @@ model CashMovement {
   id         Int      @id @default(autoincrement())
   shiftId    Int
   shift      Shift    @relation(fields: [shiftId], references: [id])
-  amount     Decimal
+  amount     Decimal  @db.Decimal(18, 2)
   reason     String
   employeeId Int
   saleId     Int?
@@ -161,6 +161,7 @@ model Audit {
   entity     String
   detail     String
   createdAt  DateTime @default(now())
+
   @@index([createdAt])
 }
 
@@ -168,8 +169,8 @@ model PriceRule {
   id        Int     @id @default(autoincrement())
   productId Int
   product   Product @relation(fields: [productId], references: [id])
-  minimum   Decimal
-  unitPrice Decimal
+  minimum   Decimal @db.Decimal(18, 3)
+  unitPrice Decimal @db.Decimal(18, 2)
 }
 
 model Supplier {
@@ -185,8 +186,9 @@ model SupplierOffer {
   supplier   Supplier @relation(fields: [supplierId], references: [id])
   productId  Int
   product    Product  @relation(fields: [productId], references: [id])
-  cost       Decimal
+  cost       Decimal  @db.Decimal(18, 2)
   updatedAt  DateTime @updatedAt
+
   @@unique([supplierId, productId])
 }
 
@@ -203,9 +205,9 @@ model CashWithdrawal {
   employeeId    Int
   method        String
   mode          String
-  cashAmount    Decimal
-  digitalAmount Decimal
-  commission    Decimal
+  cashAmount    Decimal  @db.Decimal(18, 2)
+  digitalAmount Decimal  @db.Decimal(18, 2)
+  commission    Decimal  @db.Decimal(18, 2)
   createdAt     DateTime @default(now())
 }
 
@@ -228,11 +230,18 @@ model ImportedProduct {
   name           String
   normalizedKey  String        @unique
   unit           String
-  referencePrice Decimal
+  referencePrice Decimal       @db.Decimal(18, 2)
   barcode        String?
   productId      Int?          @unique
   product        Product?      @relation(fields: [productId], references: [id])
   reviewedAt     DateTime?
+
   @@unique([importId, sourceRow])
   @@index([barcode])
+}
+
+// La migración mantiene esta tabla mediante triggers; no se modifica desde la UI.
+model BarcodeReservation {
+  barcode String @id
+  owner   String @unique
 }

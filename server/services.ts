@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createHash } from "node:crypto";
-import { audit, db, D, ensure, type Tx } from "./db.js";
+import { audit, db, D, ensure, type Tx, transaction } from "./db.js";
 
 export const money = z.coerce
   .number()
@@ -122,7 +122,7 @@ export async function createSale(
   const requestHash = createHash("sha256")
     .update(JSON.stringify(input))
     .digest("hex");
-  return db.$transaction(async (tx) => {
+  return transaction(async (tx) => {
     const previous = await tx.sale.findUnique({
       where: { requestKey: input.requestKey },
       include: { lines: true, payments: true },
@@ -247,7 +247,7 @@ export async function settleSale(
   customerId: number | undefined,
   employeeId: number,
 ) {
-  return db.$transaction(async (tx) => {
+  return transaction(async (tx) => {
     const shift = await currentShift(tx);
     const sale = await tx.sale.findUniqueOrThrow({ where: { id: saleId } });
     ensure(sale.status === "PENDIENTE", "Esta venta ya no está pendiente");
@@ -284,7 +284,7 @@ export async function voidSale(
   employeeId: number,
   adminId: number,
 ) {
-  return db.$transaction(async (tx) => {
+  return transaction(async (tx) => {
     const sale = await tx.sale.findUniqueOrThrow({
       where: { id: saleId },
       include: { lines: true, payments: true },
@@ -363,7 +363,7 @@ export async function voidSale(
 }
 
 export async function reconcile() {
-  return db.$transaction(async (tx) => {
+  return transaction(async (tx) => {
     const products = await tx.product.findMany({
       include: { movements: true },
     });

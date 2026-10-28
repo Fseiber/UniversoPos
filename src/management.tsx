@@ -1042,7 +1042,7 @@ export function Admin({ auditMode }: { auditMode: boolean }) {
           </div>
           <div className="settings-body">
             <span className="badge green">
-              SQLite local · migraciones versionadas
+              PostgreSQL · base de datos compartida
             </span>
             <p>
               Se genera un respaldo al iniciar, al abrir y cerrar caja y cada 24

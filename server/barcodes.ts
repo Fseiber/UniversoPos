@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { db, audit, ensure, type Tx } from "./db.js";
+import { db, audit, ensure, type Tx, transaction } from "./db.js";
 
 export const barcodeValue = z
   .string()
@@ -53,7 +53,7 @@ export const saveBarcodeInput = z.object({
 });
 export async function saveBarcode(source: unknown, employeeId: number) {
   const input = saveBarcodeInput.parse(source);
-  return db.$transaction(async (tx) => {
+  return transaction(async (tx) => {
     const target =
       input.kind === "PRODUCT"
         ? await tx.product.findUniqueOrThrow({ where: { id: input.id } })

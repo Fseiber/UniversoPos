@@ -10,10 +10,18 @@
     "demo": "tsx scripts/demo.ts",
     "setup": "node scripts/setup.mjs",
     "import:catalog": "tsx scripts/import-catalog.ts",
+    "catalog:sync": "tsx scripts/catalog-sync.ts",
+    "catalog:hooks": "node scripts/catalog-hooks.mjs",
     "db:migrate": "prisma migrate deploy",
     "db:generate": "prisma generate",
     "test": "tsx --test tests/*.test.ts",
-    "check": "npm run build && npm test"
+    "check": "npm run build && npm test",
+    "db:local:init": "tsx scripts/postgres-local.ts init",
+    "db:local:start": "tsx scripts/postgres-local.ts start",
+    "db:local:stop": "tsx scripts/postgres-local.ts stop",
+    "db:import-sqlite": "tsx scripts/import-sqlite.ts",
+    "db:backup": "tsx scripts/backup.ts",
+    "db:check": "tsx scripts/check-database.ts"
   },
   "dependencies": {
     "@prisma/client": "6.19.3",

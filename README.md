@@ -1,12 +1,13 @@
 # El Universo POS
 
-Punto de venta local para el comercio. React + Vite + TypeScript, Express, Prisma y SQLite. Interfaz en español y moneda argentina.
+Punto de venta local para el comercio. React + Vite + TypeScript, Express, Prisma y PostgreSQL. Interfaz en español y moneda argentina.
 
 ## Iniciar en esta computadora
 
 El proyecto ya tiene dependencias instaladas y compilación generada. Desde esta carpeta:
 
 ```powershell
+npm run db:local:start
 npm start
 ```
 
@@ -20,20 +21,21 @@ En una instalación nueva, la primera pantalla permite crear el administrador y 
 npm run demo
 ```
 
-Abrí **http://127.0.0.1:3002**. Elegí `Demo · Administración` y usá el PIN **246810**. Este acceso es público, ficticio y exclusivo de demostración. La base `.demo/demo-v1.db` está separada de `prisma/universo.db`. El encabezado indica «Demostración».
+Abrí **http://127.0.0.1:3002**. Elegí `Demo · Administración` y usá el PIN **246810**. Este acceso es público, ficticio y exclusivo de demostración. El esquema PostgreSQL `universo_demo` está separado del esquema del comercio. El encabezado indica «Demostración».
 
 ## Instalación desde cero
 
-Requiere Node.js 24.21 o una revisión compatible de Node 24 y npm. Con el servidor detenido:
+Requiere Node.js 24.21 o una revisión compatible de Node 24, npm y PostgreSQL 17+ con sus herramientas de respaldo. Con el servidor detenido:
 
 ```powershell
 npm ci
+npm run db:local:init
 npm run setup
 npm run build
 npm start
 ```
 
-`setup` crea `.env` si falta, prepara el archivo SQLite, aplica migraciones versionadas y genera Prisma Client. Las instalaciones y actualizaciones requieren internet; las ventas y la base funcionan localmente sin conexión. La consulta a Mercado Pago y el enlace a WhatsApp sí requieren conexión.
+`setup` crea `.env` si falta, aplica migraciones PostgreSQL y genera Prisma Client. La aplicación necesita conexión con su servidor; si está en la red local, las ventas no dependen de Internet. Para trasladar SQLite o compartir datos con la notebook, ver [POSTGRESQL.md](docs/POSTGRESQL.md).
 
 Para desarrollo: `npm run dev` (Vite en 5173 y API en 3001). Para validar: `npm run build` y `npm test`. Las pruebas usan bases temporales separadas y no modifican el comercio.
 
@@ -54,7 +56,7 @@ Las anulaciones requieren un PIN ADMIN y revierten stock y efectivo o deuda. Una
 
 La hoja de ruta y sus entregas están en [docs/FASES.md](docs/FASES.md) y [docs/ENTREGAS.md](docs/ENTREGAS.md).
 
-La compilación de producción y las 35 pruebas pasan: escenarios de integración, importación segura y formato y edición de importes. Se verificó por navegador el acceso de demostración, apertura de caja, agregado de producto, cobro, comprobante, métricas, venta rápida con miles y centavos y revisión de productos importados. No se conectó una cuenta real de Mercado Pago ni se probó un lector físico, impresora o teléfono externo.
+La compilación de producción y las 38 pruebas pasan: escenarios de integración, importación segura y formato y edición de importes. Se verificó por navegador el acceso de demostración, apertura de caja, agregado de producto, cobro, comprobante, métricas, venta rápida con miles y centavos y revisión de productos importados. No se conectó una cuenta real de Mercado Pago ni se probó un lector físico, impresora o teléfono externo.
 
 Los campos de importes muestran puntos de miles mientras escribís: `5000` se ve como `5.000`. Para centavos usá coma: `5.000,50`. El valor enviado y los cálculos conservan el importe correcto. El formato también se aplica a precios, costos, caja y límites de fiado; los códigos de barras y PIN se ingresan sin separadores.
 
@@ -74,7 +76,7 @@ Si el servidor estaba abierto durante esta actualización, detenelo con Ctrl+C, 
 
 | Variable                   | Uso                                                                                     |
 | -------------------------- | --------------------------------------------------------------------------------------- |
-| `DATABASE_URL`             | SQLite. Las rutas relativas se resuelven desde `prisma/`.                               |
+| `DATABASE_URL`             | Conexión PostgreSQL privada del servidor.                               |
 | `PORT`                     | Puerto local, inicialmente 3001.                                                        |
 | `HOST`                     | Inicialmente `127.0.0.1`, acceso solo desde esta PC.                                    |
 | `BACKUP_DIR`               | Carpeta de respaldos. Configurar otra unidad/USB para protección ante falla del disco.  |
@@ -99,9 +101,15 @@ La tabla muestra, en este orden, **Límite de fiado**, **Disponible para comprar
 - **Venta rápida:** permite escribir con el teclado físico o usar los números en pantalla. Incluye coma decimal, dos ceros, borrar el último dígito y borrar el importe.
 - **Mostrador compacto:** se retiró la cabecera decorativa y se agrandaron los textos. En escritorio, los productos se desplazan dentro del catálogo y el cobro permanece a la vista.
 
+## Base compartida entre computadoras
+
+PostgreSQL es la fuente de datos. Se retiró la sincronización de catálogo por Git;
+Git comparte código y migraciones. Ambos equipos acceden al mismo servidor del POS.
+Ver [instalación, datos y acceso compartido](docs/POSTGRESQL.md).
+
 ## Respaldos y recuperación
 
-Se usa la API de respaldo de SQLite para incluir los datos confirmados, incluso con WAL activo. Se genera una copia al iniciar el servidor, abrir/cerrar caja y cada 24 horas mientras el proceso esté encendido. La rotación borra únicamente archivos propios `universo-<fecha>.db` con más de 15 días de antigüedad. Configuración muestra el último éxito o error de la ejecución actual.
+Se usa `pg_dump` con formato custom (`.dump`) para respaldar PostgreSQL. Se genera una copia al iniciar, abrir/cerrar caja y cada 24 horas. La rotación conserva 15 días de dumps propios. `pg_dump` debe estar instalado y ser compatible con el servidor. Configuración muestra el último éxito o error. SQLite y sus respaldos históricos se conservan como origen del traslado.
 
 El procedimiento de recuperación está en [docs/OPERACION.md](docs/OPERACION.md). El servidor debe detenerse antes de recuperar una base. Los respaldos contienen datos del comercio y hashes de PIN; conservá su carpeta con acceso restringido.
 
@@ -111,4 +119,4 @@ El servidor recalcula precios, ofertas, totales y límites. Dinero: dos decimale
 
 Los reportes distinguen ventas del período, cobros, saldos actuales y pendientes. El margen usa el costo histórico de cada venta; no incluye costos desconocidos de ventas rápidas, gastos ni impuestos. Una anulación excluye la venta de los reportes históricos: los reportes son una vista del estado actual de esas operaciones.
 
-Referencia técnica: [SQLite y Decimal en Prisma](https://www.prisma.io/docs/orm/v6/overview/databases/sqlite) y [consulta de pagos de Mercado Pago](https://www.mercadopago.com.ar/developers/es/reference/online-payments/subscriptions/search-payments/get).
+Referencia técnica: [transacciones PostgreSQL en Prisma 6](https://www.prisma.io/docs/orm/v6/prisma-client/queries/transactions) y [consulta de pagos de Mercado Pago](https://www.mercadopago.com.ar/developers/es/reference/online-payments/subscriptions/search-payments/get).

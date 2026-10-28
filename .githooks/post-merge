@@ -1,0 +1,2 @@
+#!/bin/sh
+echo 'Código actualizado. Si hay migraciones nuevas, ejecutá npm ci y npm run setup en el servidor del POS.'

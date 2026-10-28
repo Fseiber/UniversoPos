@@ -1,3 +1,9 @@
+## PostgreSQL · 28/10/2026
+
+Motor actual PostgreSQL, migraciones y restricciones propias, Decimal nativo, transacciones serializables con reintentos y reserva global de códigos. Se retiró la sincronización de catálogo por Git y se conservaron los JSON locales fuera del índice. Se trasladaron los datos reales desde SQLite con snapshot consistente previo: 2 productos, 371 importados y 7 ventas, junto con cuentas, stock, empleados y auditoría. Reconciliación sin diferencias. Respaldos `.dump` y recuperación comprobada en pruebas.
+
+38 pruebas verifican PostgreSQL, concurrencia, traslado y restauración. La instancia del proyecto queda separada del servicio existente en Windows. Acceso desde notebook, firewall y HTTPS/VPN requieren la configuración de red descrita en [POSTGRESQL.md](POSTGRESQL.md); no se habilitaron puertos automáticamente. Las entregas siguientes son el historial anterior y no reemplazan esta configuración.
+
 # Entregas por fase
 
 ## Actualización - cuenta corriente e historial compartible
@@ -67,6 +73,18 @@ Implementadas y verificadas las herramientas locales. Backup SQLite consistente 
 Pendiente del local: selección del disco/USB externo, puesta en marcha en la PC del kiosco, lectores/impresora, configuración de arranque de Windows, acceso remoto y simulacro de recuperación con el responsable. No se declara producción certificada ni despliegue remoto terminado.
 
 ## Evidencia automatizada
+
+### Catálogo por Git · 28/10/2026
+
+Sincronización de catálogo mediante JSON por identidad estable; base comercial,
+stock y accesos locales. Incluye importados pendientes y sus códigos, transferencia
+de identidad al habilitar, respaldo previo, reconciliación por campo y rechazo de
+conflictos. Hooks opcionales por clon para commit/merge y comprobación antes de
+start/dev. Guía: `docs/CATALOGO-GIT.md`.
+
+38 pruebas aprobadas, incluida una simulación con dos bases y ediciones desde ambos
+equipos. Clon vacío comprobado con 372 fichas del catálogo: 2 productos, 370 pendientes,
+stock cero, cero ventas/clientes/usuarios. Sin push automático ni sincronización en vivo.
 
 `npm run build`: TypeScript y bundle de producción correctos.
 

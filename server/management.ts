@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { admin } from "./auth.js";
-import { audit, db, D, ensure } from "./db.js";
+import { audit, db, D, ensure, transaction } from "./db.js";
 import {
   currentShift,
   expectedCash,
@@ -23,7 +23,7 @@ management.post("/withdrawals", async (req, res) => {
       mode: z.enum(["RECARGO", "DESCUENTO"]),
     })
     .parse(req.body);
-  const result = await db.$transaction(async (tx) => {
+  const result = await transaction(async (tx) => {
     const shift = await currentShift(tx);
     const cashAmount =
       data.mode === "RECARGO"
@@ -77,7 +77,7 @@ management.post("/products/:id/rules", async (req, res) => {
   const data = z
     .object({ minimum: quantity, unitPrice: money.refine((v) => v > 0) })
     .parse(req.body);
-  const rule = await db.$transaction(async (tx) => {
+  const rule = await transaction(async (tx) => {
     const p = await tx.product.findUniqueOrThrow({ where: { id: productId } });
     ensure(
       p.unit === "PESO" || Number.isInteger(data.minimum),
@@ -102,7 +102,7 @@ management.post("/products/:id/rules", async (req, res) => {
   res.status(201).json(rule);
 });
 management.delete("/rules/:id", async (req, res) => {
-  await db.$transaction(async (tx) => {
+  await transaction(async (tx) => {
     const r = await tx.priceRule.delete({
       where: { id: id.parse(req.params.id) },
     });
@@ -131,7 +131,7 @@ management.post("/suppliers", async (req, res) => {
       contact: z.string().max(120).default(""),
     })
     .parse(req.body);
-  const supplier = await db.$transaction(async (tx) => {
+  const supplier = await transaction(async (tx) => {
     const s = await tx.supplier.create({ data });
     await audit(
       tx,
@@ -148,7 +148,7 @@ management.post("/supplier-offers", async (req, res) => {
   const data = z
     .object({ supplierId: id, productId: id, cost: money })
     .parse(req.body);
-  const offer = await db.$transaction(async (tx) => {
+  const offer = await transaction(async (tx) => {
     const offer = await tx.supplierOffer.upsert({
       where: {
         supplierId_productId: {
@@ -210,7 +210,7 @@ export async function report(from: string, to: string) {
     end.getTime() - start.getTime() <= 367 * 86400_000,
     "Elegí un período de hasta un año",
   );
-  return db.$transaction(async (tx) => {
+  return transaction(async (tx) => {
     const sales = await tx.sale.findMany({
       where: { createdAt: { gte: start, lt: end }, status: { not: "ANULADA" } },
       include: { lines: true },

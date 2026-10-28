@@ -1,3 +1,5 @@
+> Actualización 28/10/2026: PostgreSQL reemplaza SQLite como motor actual. Los detalles de puesta en marcha y operación compartida están en [POSTGRESQL.md](POSTGRESQL.md). Las referencias a SQLite en las fases anteriores describen la implementación original.
+
 # El Universo POS — hoja de ruta
 
 Fuente: chat «Punto Venta», última reorganización del usuario. El cambio posterior a React/Express/TypeScript reemplaza Django. No se mantienen dos implementaciones.
