@@ -1,0 +1,114 @@
+# El Universo POS
+
+Punto de venta local para el comercio. React + Vite + TypeScript, Express, Prisma y SQLite. Interfaz en español y moneda argentina.
+
+## Iniciar en esta computadora
+
+El proyecto ya tiene dependencias instaladas y compilación generada. Desde esta carpeta:
+
+```powershell
+npm start
+```
+
+Abrí **http://127.0.0.1:3001**. También podés ejecutar `Iniciar El Universo.cmd`.
+
+En una instalación nueva, la primera pantalla permite crear el administrador y elegir un PIN propio. Si ya lo creaste, ingresá con ese acceso. No hay una contraseña predeterminada del comercio.
+
+## Probar sin cargar datos reales
+
+```powershell
+npm run demo
+```
+
+Abrí **http://127.0.0.1:3002**. Elegí `Demo · Administración` y usá el PIN **246810**. Este acceso es público, ficticio y exclusivo de demostración. La base `.demo/demo-v1.db` está separada de `prisma/universo.db`. El encabezado indica «Demostración».
+
+## Instalación desde cero
+
+Requiere Node.js 24.21 o una revisión compatible de Node 24 y npm. Con el servidor detenido:
+
+```powershell
+npm ci
+npm run setup
+npm run build
+npm start
+```
+
+`setup` crea `.env` si falta, prepara el archivo SQLite, aplica migraciones versionadas y genera Prisma Client. Las instalaciones y actualizaciones requieren internet; las ventas y la base funcionan localmente sin conexión. La consulta a Mercado Pago y el enlace a WhatsApp sí requieren conexión.
+
+Para desarrollo: `npm run dev` (Vite en 5173 y API en 3001). Para validar: `npm run build` y `npm test`. Las pruebas usan bases temporales separadas y no modifican el comercio.
+
+## Circuito de trabajo
+
+1. Crear el administrador; agregar empleados desde Configuración.
+2. Cargar productos, códigos, precios y stock inicial. Para granel, el stock se expresa en kilos con tres decimales.
+3. Crear clientes y asignar límites de crédito como administrador.
+4. Abrir caja indicando efectivo inicial.
+5. Vender desde el mostrador: buscar/escanear un producto, usar carritos simultáneos y confirmar los medios de pago. El lector debe funcionar como teclado con Enter al finalizar.
+6. Cobrar deudas desde Clientes y fiados. Estos cobros son en efectivo y entran en el arqueo del turno actual.
+7. Consultar pendientes y saldarlos en Historial de ventas. La entrega ya descontó stock; el cobro posterior no lo descuenta otra vez.
+8. Cerrar caja con el dinero contado. Revisar el arqueo y el estado de respaldo.
+
+Las anulaciones requieren un PIN ADMIN y revierten stock y efectivo o deuda. Una deuda parcialmente cobrada que no permita revertir el saldo completo exige conciliación antes de anular. Los reintegros digitales se gestionan en el medio original; la aplicación registra la anulación interna. Los tickets son comprobantes internos, no facturas fiscales.
+
+## Fases y verificación
+
+La hoja de ruta y sus entregas están en [docs/FASES.md](docs/FASES.md) y [docs/ENTREGAS.md](docs/ENTREGAS.md).
+
+La compilación de producción y las 35 pruebas pasan: escenarios de integración, importación segura y formato y edición de importes. Se verificó por navegador el acceso de demostración, apertura de caja, agregado de producto, cobro, comprobante, métricas, venta rápida con miles y centavos y revisión de productos importados. No se conectó una cuenta real de Mercado Pago ni se probó un lector físico, impresora o teléfono externo.
+
+Los campos de importes muestran puntos de miles mientras escribís: `5000` se ve como `5.000`. Para centavos usá coma: `5.000,50`. El valor enviado y los cálculos conservan el importe correcto. El formato también se aplica a precios, costos, caja y límites de fiado; los códigos de barras y PIN se ingresan sin separadores.
+
+## Catálogo importado desde Excel
+
+Los 371 productos del archivo aportado están en **Productos → Importados por revisar → Revisar productos**. Se conservan los nombres, la unidad y el precio anterior como referencia; no se habilitaron precios viejos para vender. El archivo no trae códigos de barras, categorías, costos ni stock.
+
+Como administrador, buscá el producto y seleccioná **Actualizar y habilitar**. Completá el Precio de venta al cliente y el stock inicial. El Costo de compra es opcional: podés dejarlo vacío y completarlo después desde Editar producto. Elegí la categoría en el selector y agregá el código de barras si tiene. Al guardar aparece en el catálogo activo y el stock inicial queda registrado en el Kardex. El precio anterior y la fila de origen se conservan en el registro de importación. Los pendientes no aparecen en el mostrador ni se incluyen en el valor del inventario.
+
+Se hizo un respaldo previo. El importador detecta reintentos del mismo archivo y omite coincidencias con productos existentes para conservar precios y movimientos actuales. No hay una importación automática con habilitación masiva.
+
+Si el servidor estaba abierto durante esta actualización, detenelo con Ctrl+C, ejecutá `npm start` y recargá el navegador para usar las nuevas rutas de revisión.
+
+## Configuración
+
+`.env` no debe subirse a un repositorio:
+
+| Variable                   | Uso                                                                                     |
+| -------------------------- | --------------------------------------------------------------------------------------- |
+| `DATABASE_URL`             | SQLite. Las rutas relativas se resuelven desde `prisma/`.                               |
+| `PORT`                     | Puerto local, inicialmente 3001.                                                        |
+| `HOST`                     | Inicialmente `127.0.0.1`, acceso solo desde esta PC.                                    |
+| `BACKUP_DIR`               | Carpeta de respaldos. Configurar otra unidad/USB para protección ante falla del disco.  |
+| `MERCADOPAGO_ACCESS_TOKEN` | Access Token privado del titular para consulta de actividad. Se usa solo en el backend. |
+| `COOKIE_SECURE`            | `true` cuando exista HTTPS. Para localhost HTTP queda desactivado.                      |
+
+El acceso desde celular tiene interfaz responsive y permisos ADMIN para gestión. Acceso fuera del comercio, HTTPS/VPN y puesta en marcha automática de Windows se configuran en el entorno real. No abras puertos del router para usar esta versión sin esa configuración.
+
+## Ajustes de uso diario
+
+### Clientes y fiados
+
+La tabla muestra, en este orden, **Límite de fiado**, **Disponible para comprar** y **Saldo a pagar**. El saldo se forma con compras fiadas menos pagos y anulaciones. Registrar un pago permite elegir entre pagar todo el saldo o entregar una parte, con vista previa de saldo y disponible después del pago. Los cobros de deuda se registran en efectivo y requieren una caja abierta.
+
+**Compras y pagos** abre el historial completo del cliente: productos, cantidades, precios históricos, total de cada compra, parte fiada, medios de pago y movimientos de la cuenta con saldo acumulado. Permite consultar fechas o ver todo. Los saldos actuales se identifican por separado del saldo inicial/final del período. Los pagos se aplican al saldo de la cuenta, sin asignación a una compra específica. Las ventas rápidas muestran solo su importe porque no registran productos.
+
+**Imprimir / PDF** abre un resumen completo de los resultados consultados, listo para imprimir o guardar. **Preparar WhatsApp** arma un mensaje con ese mismo detalle; el usuario elige el destinatario y confirma el envío en WhatsApp. Si el historial supera el largo previsto para un enlace, se copia completo y se ofrece abrir WhatsApp para pegarlo, o consultar un período menor. No se envían mensajes automáticamente.
+
+- **Costo de compra opcional:** dejarlo vacío significa que todavía no se conoce. Un costo de $0 cargado explícitamente se trata como cero real. Los reportes distinguen ventas sin costo conocido y muestran el margen parcial; cargar un costo después no cambia ventas anteriores.
+- **Corregir stock:** en Productos, usá el botón **Stock**. Elegí **Establecer el stock contado** para reemplazar el valor temporal por la cantidad real. También podés sumar o retirar mercadería. Se guarda el ajuste en Kardex.
+- **Fiado predeterminado:** al elegir un cliente en el carrito, el cobro propone Fiado; podés cambiarlo a otro medio de pago antes de confirmar.
+- **Venta rápida:** permite escribir con el teclado físico o usar los números en pantalla. Incluye coma decimal, dos ceros, borrar el último dígito y borrar el importe.
+- **Mostrador compacto:** se retiró la cabecera decorativa y se agrandaron los textos. En escritorio, los productos se desplazan dentro del catálogo y el cobro permanece a la vista.
+
+## Respaldos y recuperación
+
+Se usa la API de respaldo de SQLite para incluir los datos confirmados, incluso con WAL activo. Se genera una copia al iniciar el servidor, abrir/cerrar caja y cada 24 horas mientras el proceso esté encendido. La rotación borra únicamente archivos propios `universo-<fecha>.db` con más de 15 días de antigüedad. Configuración muestra el último éxito o error de la ejecución actual.
+
+El procedimiento de recuperación está en [docs/OPERACION.md](docs/OPERACION.md). El servidor debe detenerse antes de recuperar una base. Los respaldos contienen datos del comercio y hashes de PIN; conservá su carpeta con acceso restringido.
+
+## Precisión y trazabilidad
+
+El servidor recalcula precios, ofertas, totales y límites. Dinero: dos decimales; stock y peso: tres. Decimal se usa en las operaciones y los movimientos se guardan en transacciones. Pagos, Kardex y cuentas corrientes tienen historial. Las reglas SQL adicionales están en una migración: un turno abierto, stock no negativo, límites de cuenta y roles válidos.
+
+Los reportes distinguen ventas del período, cobros, saldos actuales y pendientes. El margen usa el costo histórico de cada venta; no incluye costos desconocidos de ventas rápidas, gastos ni impuestos. Una anulación excluye la venta de los reportes históricos: los reportes son una vista del estado actual de esas operaciones.
+
+Referencia técnica: [SQLite y Decimal en Prisma](https://www.prisma.io/docs/orm/v6/overview/databases/sqlite) y [consulta de pagos de Mercado Pago](https://www.mercadopago.com.ar/developers/es/reference/online-payments/subscriptions/search-payments/get).

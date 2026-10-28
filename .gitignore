@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+prisma/*.db*
+backups/
+coverage/
+.test-data/
+.demo/
+.imports/
+*.log

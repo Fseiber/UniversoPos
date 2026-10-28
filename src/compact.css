@@ -1,0 +1,57 @@
+@media (min-width: 761px) and (max-height: 850px) {
+  .content {
+    padding-top: 22px;
+  }
+  .page-heading {
+    margin-bottom: 20px;
+  }
+  .page-heading h1 {
+    font-size: 25px;
+  }
+  .cart-items {
+    min-height: 100px;
+    max-height: max(100px, calc(100dvh - 610px));
+  }
+  .cart .empty {
+    min-height: 100px;
+    padding: 15px 12px;
+  }
+  .cart .empty > svg {
+    width: 26px;
+    height: 26px;
+  }
+  .cart .empty h3 {
+    margin-top: 12px;
+  }
+  .cart-title {
+    padding-top: 16px;
+    padding-bottom: 12px;
+  }
+  .cart-summary {
+    padding-top: 13px;
+    padding-bottom: 10px;
+  }
+  .cart-summary .totals {
+    margin: 14px 0;
+  }
+  .cart-summary .totals .grand-total {
+    padding-top: 12px;
+    margin-top: 12px;
+  }
+  .cart-summary > .subtle {
+    padding: 7px;
+  }
+  .cart-footnote {
+    margin-top: 6px;
+  }
+}
+.report-filters .button {
+  font-size: 11px;
+  padding: 10px;
+}
+.demo-label {
+  color: #a68d53;
+  font-size: 9px;
+  letter-spacing: 1px;
+  margin-left: 14px;
+}

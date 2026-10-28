@@ -1,0 +1,236 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Employee {
+  id           Int       @id @default(autoincrement())
+  name         String
+  pinHash      String
+  role         String
+  active       Boolean   @default(true)
+  failures     Int       @default(0)
+  lockedUntil  DateTime?
+  sessions     Session[]
+  shifts       Shift[]
+  sales        Sale[]
+  createdAt    DateTime  @default(now())
+}
+
+model Session {
+  id         String   @id
+  employeeId Int
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  expiresAt  DateTime
+}
+
+model Product {
+  id          Int             @id @default(autoincrement())
+  name        String
+  barcode     String?         @unique
+  category    String          @default("General")
+  unit        String          @default("UNIDAD")
+  cost        Decimal?
+  price       Decimal
+  stock       Decimal         @default(0)
+  minimum     Decimal         @default(0)
+  active      Boolean         @default(true)
+  lines       SaleLine[]
+  movements   StockMovement[]
+  rules       PriceRule[]
+  offers      SupplierOffer[]
+  importItem  ImportedProduct?
+  createdAt   DateTime        @default(now())
+}
+
+model Customer {
+  id          Int               @id @default(autoincrement())
+  name        String
+  phone       String            @default("")
+  creditLimit Decimal           @default(0)
+  balance     Decimal           @default(0)
+  active      Boolean           @default(true)
+  movements   AccountMovement[]
+  sales       Sale[]
+}
+
+model Shift {
+  id          Int            @id @default(autoincrement())
+  employeeId  Int
+  employee    Employee       @relation(fields: [employeeId], references: [id])
+  opening     Decimal
+  openedAt    DateTime       @default(now())
+  closedAt    DateTime?
+  declared    Decimal?
+  expected    Decimal?
+  difference  Decimal?
+  sales       Sale[]
+  movements   CashMovement[]
+  accounts    AccountMovement[]
+}
+
+model Sale {
+  id            Int         @id @default(autoincrement())
+  requestKey    String      @unique
+  requestHash   String      @default("")
+  employeeId    Int
+  employee      Employee    @relation(fields: [employeeId], references: [id])
+  shiftId       Int
+  shift         Shift       @relation(fields: [shiftId], references: [id])
+  customerId    Int?
+  customer      Customer?   @relation(fields: [customerId], references: [id])
+  pendingName   String?
+  status        String      @default("COMPLETADA")
+  subtotal      Decimal
+  surcharge     Decimal     @default(0)
+  total         Decimal
+  quickAmount   Decimal     @default(0)
+  createdAt     DateTime    @default(now())
+  voidedAt      DateTime?
+  voidReason    String?
+  lines         SaleLine[]
+  payments      Payment[]
+}
+
+model SaleLine {
+  id          Int     @id @default(autoincrement())
+  saleId      Int
+  sale        Sale    @relation(fields: [saleId], references: [id])
+  productId   Int
+  product     Product @relation(fields: [productId], references: [id])
+  name        String
+  quantity    Decimal
+  unitPrice   Decimal
+  unitCost    Decimal?
+  total       Decimal
+}
+
+model Payment {
+  id       Int     @id @default(autoincrement())
+  saleId   Int
+  sale     Sale    @relation(fields: [saleId], references: [id])
+  method   String
+  amount   Decimal
+  shiftId  Int
+  createdAt DateTime @default(now())
+}
+
+model StockMovement {
+  id         Int      @id @default(autoincrement())
+  productId  Int
+  product    Product  @relation(fields: [productId], references: [id])
+  quantity   Decimal
+  reason     String
+  saleId     Int?
+  employeeId Int
+  createdAt  DateTime @default(now())
+}
+
+model AccountMovement {
+  id         Int      @id @default(autoincrement())
+  customerId Int
+  customer   Customer @relation(fields: [customerId], references: [id])
+  amount     Decimal
+  kind       String
+  saleId     Int?
+  shiftId    Int?
+  shift      Shift?   @relation(fields: [shiftId], references: [id])
+  employeeId Int
+  createdAt  DateTime @default(now())
+}
+
+model CashMovement {
+  id         Int      @id @default(autoincrement())
+  shiftId    Int
+  shift      Shift    @relation(fields: [shiftId], references: [id])
+  amount     Decimal
+  reason     String
+  employeeId Int
+  saleId     Int?
+  createdAt  DateTime @default(now())
+}
+
+model Audit {
+  id         Int      @id @default(autoincrement())
+  employeeId Int?
+  action     String
+  entity     String
+  detail     String
+  createdAt  DateTime @default(now())
+  @@index([createdAt])
+}
+
+model PriceRule {
+  id        Int     @id @default(autoincrement())
+  productId Int
+  product   Product @relation(fields: [productId], references: [id])
+  minimum   Decimal
+  unitPrice Decimal
+}
+
+model Supplier {
+  id      Int             @id @default(autoincrement())
+  name    String
+  contact String          @default("")
+  offers  SupplierOffer[]
+}
+
+model SupplierOffer {
+  id         Int      @id @default(autoincrement())
+  supplierId Int
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+  productId  Int
+  product    Product  @relation(fields: [productId], references: [id])
+  cost       Decimal
+  updatedAt  DateTime @updatedAt
+  @@unique([supplierId, productId])
+}
+
+model Shortage {
+  id        Int      @id @default(autoincrement())
+  note      String
+  done      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model CashWithdrawal {
+  id            Int      @id @default(autoincrement())
+  shiftId       Int
+  employeeId    Int
+  method        String
+  mode          String
+  cashAmount    Decimal
+  digitalAmount Decimal
+  commission    Decimal
+  createdAt     DateTime @default(now())
+}
+
+model ProductImport {
+  id          Int               @id @default(autoincrement())
+  sourceName  String
+  sourceHash  String            @unique
+  sheetName   String
+  recordCount Int
+  skipped     Int               @default(0)
+  createdAt   DateTime          @default(now())
+  items       ImportedProduct[]
+}
+
+model ImportedProduct {
+  id             Int           @id @default(autoincrement())
+  importId       Int
+  batch          ProductImport @relation(fields: [importId], references: [id])
+  sourceRow      Int
+  name           String
+  normalizedKey  String        @unique
+  unit           String
+  referencePrice Decimal
+  productId      Int?          @unique
+  product        Product?      @relation(fields: [productId], references: [id])
+  reviewedAt     DateTime?
+  @@unique([importId, sourceRow])
+}

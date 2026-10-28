@@ -1,0 +1,431 @@
+/* Controles legibles y espacio de trabajo del mostrador sin cabecera decorativa. */
+:root {
+  font-size: 16px;
+}
+.app button,
+.app .button,
+.app input,
+.app select {
+  font-size: 15px;
+}
+.app p,
+.app .notice,
+.app .field > span {
+  font-size: 15px;
+}
+.app small,
+.app .muted,
+.app .breadcrumb,
+.app .header-info,
+.app .badge {
+  font-size: 12px;
+}
+.app table {
+  font-size: 15px;
+}
+.app th {
+  font-size: 14px;
+}
+.app td > strong,
+.app td b {
+  font-size: 15px;
+}
+.app td small {
+  font-size: 12px;
+}
+.app .sidebar nav button {
+  font-size: 14px;
+  padding: 10px;
+}
+.sidebar {
+  overflow-y: auto;
+  padding-top: 22px;
+}
+.app .nav-label {
+  margin: 24px 14px 12px;
+}
+.app .sidebar nav {
+  gap: 3px;
+}
+.app .sidebar nav button {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+.app .sidebar-bottom {
+  padding-top: 12px;
+}
+.app .local-status {
+  padding-bottom: 10px;
+}
+.app .theme {
+  margin-bottom: 10px;
+  padding: 8px 12px;
+}
+.app .user {
+  padding: 12px 0;
+}
+.app .user strong {
+  font-size: 14px;
+}
+.app .user small,
+.app .local-status,
+.app .theme {
+  font-size: 12px;
+}
+.app .topbar {
+  height: 64px;
+}
+.app .content {
+  padding: 16px 24px;
+}
+.app .section-line h3 {
+  font-size: 16px;
+}
+.app .section-line h3 span {
+  font-size: 13px;
+}
+.app .category-tabs button {
+  font-size: 14px;
+  padding: 8px 12px;
+}
+.app .search-box input {
+  font-size: 16px;
+}
+.app .product-info > strong {
+  font-size: 16px;
+  min-height: 44px;
+}
+.app .product-info b {
+  font-size: 17px;
+}
+.app .product-info > small,
+.app .product-info b small {
+  font-size: 11px;
+}
+.app .product-info div > span {
+  font-size: 13px;
+}
+.app .product-art > span {
+  font-size: 9px;
+}
+.app .cart-title h2 {
+  font-size: 19px;
+}
+.app .cart-tabs button {
+  font-size: 14px;
+}
+.app .cart-item strong,
+.app .cart-item b {
+  font-size: 15px;
+}
+.app .cart-item small {
+  font-size: 12px;
+}
+.app .quantity input {
+  font-size: 15px;
+}
+.app .cart-summary .field > span,
+.app .totals > div {
+  font-size: 14px;
+}
+.app .credit-hint {
+  font-size: 13px;
+}
+.app .totals .grand-total {
+  font-size: 17px;
+}
+.app .grand-total > strong:last-child {
+  font-size: 27px;
+}
+.app .charge,
+.app .charge > span {
+  font-size: 16px;
+}
+.app .cart-summary > .subtle {
+  font-size: 14px;
+}
+.app .pos-footer,
+.app .cart-footnote {
+  display: none;
+}
+.app .stat > div,
+.app .stat > small {
+  font-size: 13px;
+}
+.app .panel-toolbar h2 {
+  font-size: 18px;
+}
+.app .row-actions > button:not(.icon-button) {
+  font-size: 14px;
+}
+.modal .field > span,
+.modal > p,
+.modal p,
+.modal .notice {
+  font-size: 15px;
+}
+.modal input,
+.modal select,
+.modal button {
+  font-size: 16px;
+}
+.modal small {
+  font-size: 13px;
+}
+.modal .payment-total strong {
+  font-size: 34px;
+}
+.numeric-keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 16px 0;
+}
+.numeric-keypad button {
+  min-height: 48px;
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+  padding: 8px;
+}
+.numeric-keypad button:nth-last-child(2) {
+  grid-column: span 2;
+  font-size: 16px;
+}
+.numeric-keypad button:last-child {
+  font-size: 22px;
+}
+@media (min-width: 1000px) {
+  .app .pos-layout {
+    height: calc(100dvh - 96px);
+    min-height: 510px;
+    grid-template-columns: minmax(0, 1fr) 370px;
+    gap: 20px;
+    align-items: stretch;
+  }
+  .app .pos-layout.needs-shift {
+    height: calc(100dvh - 174px);
+  }
+  .app .product-browser {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .app .product-browser > form,
+  .app .product-browser > .section-line,
+  .app .category-tabs {
+    flex-shrink: 0;
+  }
+  .app .category-tabs {
+    margin: 12px 0 16px;
+  }
+  .app .product-grid {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    align-content: start;
+    grid-auto-rows: max-content;
+    padding-right: 4px;
+  }
+  .app .product-art {
+    height: 80px;
+  }
+  .app .cart {
+    display: flex;
+    flex-direction: column;
+    position: static;
+    height: 100%;
+    min-height: 0;
+  }
+  .app .cart > .cart-items {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+  }
+  .app .cart > .cart-summary,
+  .app .cart-tabs,
+  .app .cart-title {
+    flex-shrink: 0;
+  }
+  .app .cart-title {
+    padding: 12px 18px;
+  }
+  .app .cart-summary {
+    padding: 12px 18px 8px;
+  }
+  .app .cart-summary .totals {
+    margin: 12px 0;
+  }
+  .app .cart-summary .totals > div {
+    margin-bottom: 10px;
+  }
+  .app .cart-summary .totals .grand-total {
+    margin-top: 12px;
+    padding-top: 12px;
+  }
+  .app main > .notice {
+    position: fixed;
+    top: 68px;
+    right: 24px;
+    max-width: calc(100vw - 280px);
+    margin: 0;
+    z-index: 45;
+    box-shadow: var(--shadow);
+  }
+}
+@media (max-width: 999px) {
+  .app .product-grid {
+    max-height: 360px;
+    overflow-y: auto;
+  }
+  .app .cart-items {
+    min-height: 130px;
+  }
+}
+@media (max-width: 760px) {
+  .app .content {
+    padding: 14px;
+  }
+  .app .topbar {
+    padding: 0 10px;
+  }
+  .app .header-info .badge {
+    font-size: 10px;
+  }
+}
+@media (max-height: 760px) {
+  .numeric-keypad {
+    gap: 6px;
+    margin: 10px 0;
+  }
+  .numeric-keypad button {
+    min-height: 42px;
+  }
+  .modal:has(.numeric-keypad) .field {
+    margin-bottom: 10px;
+  }
+  .modal:has(.numeric-keypad) > p {
+    margin-bottom: 14px;
+  }
+}
+@media print {
+  .app .pos-layout {
+    height: auto;
+  }
+}
+
+.account-filters {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.customer-table td,
+.customer-table th {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+.account-filters .field {
+  flex: 1;
+  min-width: 140px;
+  margin-bottom: 0;
+}
+.account-stats {
+  gap: 10px;
+}
+.account-stats .stat {
+  padding: 14px;
+}
+.account-stats .stat > strong {
+  font-size: 23px;
+}
+.account-section {
+  margin: 24px 0;
+}
+.account-section > h3 {
+  font-size: 18px;
+  margin-bottom: 16px;
+}
+.account-purchase {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 18px;
+  overflow: hidden;
+}
+.account-purchase-head,
+.account-purchase-totals {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px;
+  background: var(--soft);
+}
+.account-purchase-head small {
+  display: block;
+  margin-top: 4px;
+}
+.account-purchase-totals {
+  font-size: 14px;
+}
+.account-payment-methods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.modal .account-help {
+  font-size: 13px;
+}
+.account-credit-strip {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.account-credit-strip small,
+.account-credit-strip strong {
+  display: block;
+}
+.account-credit-strip strong {
+  font-size: 18px;
+  margin-top: 6px;
+}
+.account-after-payment {
+  padding: 16px;
+  border-radius: 8px;
+  background: var(--soft);
+  margin: 18px 0;
+}
+.modal:has(.account-after-payment) .payment-total {
+  padding: 14px;
+  margin-bottom: 14px;
+}
+.modal:has(.account-after-payment) .account-credit-strip {
+  margin-bottom: 12px;
+}
+.modal:has(.account-after-payment) > p {
+  margin-bottom: 16px;
+}
+.account-after-payment > strong {
+  display: block;
+  margin-bottom: 12px;
+}
+.account-after-payment > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+  font-size: 14px;
+  margin-top: 10px;
+}
+@media (max-width: 550px) {
+  .account-stats.three {
+    grid-template-columns: 1fr;
+  }
+  .account-credit-strip {
+    grid-template-columns: 1fr;
+  }
+}
