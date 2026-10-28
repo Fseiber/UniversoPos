@@ -11,7 +11,7 @@ test("Migración · costo opcional conserva ventas, importaciones vinculadas y r
       .filter((n) => !n.endsWith(".toml"))
       .sort();
     for (const name of names.filter(
-      (n) => !n.endsWith("optional_purchase_cost"),
+      (n) => n < names.find((v) => v.endsWith("optional_purchase_cost"))!,
     ))
       sqlite.exec(
         readFileSync(

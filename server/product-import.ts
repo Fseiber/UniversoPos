@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { db, D, audit, ensure, type Tx } from "./db.js";
 import { money, moveStock, optionalMoney } from "./services.js";
+import { ensureBarcodeAvailable } from "./barcodes.js";
 
 export const productKey = (name: string, unit: string) =>
   JSON.stringify([
@@ -141,7 +142,7 @@ const explicitValue = (value: unknown) =>
 const explicitMoney = z.preprocess(explicitValue, money);
 export const activateImportedInput = z.object({
   name: z.string().trim().min(1).max(120),
-  barcode: z.string().trim().max(80).default(""),
+  barcode: z.string().trim().max(80).optional(),
   category: z.string().trim().min(1).max(60),
   price: explicitMoney.refine(
     (v) => v > 0,
@@ -199,8 +200,16 @@ export async function activateImportedProduct(
       409,
     );
     const { stock, ...fields } = data;
+    const barcode =
+      data.barcode === undefined ? item.barcode : data.barcode || null;
+    await ensureBarcodeAvailable(tx, barcode, { kind: "IMPORTED", id: itemId });
+    // Transferir la reserva al producto dentro de la misma transacción.
+    await tx.importedProduct.update({
+      where: { id: itemId },
+      data: { barcode: null },
+    });
     const product = await tx.product.create({
-      data: { ...fields, unit: item.unit, barcode: data.barcode || null },
+      data: { ...fields, unit: item.unit, barcode },
     });
     if (stock > 0)
       await moveStock(
@@ -212,7 +221,7 @@ export async function activateImportedProduct(
       );
     await tx.importedProduct.update({
       where: { id: itemId },
-      data: { productId: product.id, reviewedAt: new Date() },
+      data: { productId: product.id, reviewedAt: new Date(), barcode },
     });
     await audit(
       tx,

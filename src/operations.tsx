@@ -19,8 +19,10 @@ import { CategoryPicker } from "./category-picker";
 import { CustomerHistory } from "./customer-history";
 import { CustomerPayment } from "./customer-payment";
 import type { CustomerStatement } from "../shared/customer-statement";
+import { BarcodeCapture } from "./barcode-capture";
 
 export function Products() {
+  const [capture, setCapture] = useState(false);
   const { products, employee, task, refresh, notify, busy } = usePos();
   const [search, setSearch] = useState(""),
     [editing, setEditing] = useState<Product | "new" | null>(null),
@@ -38,6 +40,8 @@ export function Products() {
       .toLowerCase()
       .includes(search.toLowerCase()),
   );
+  if (capture && admin)
+    return <BarcodeCapture onBack={() => setCapture(false)} />;
   return (
     <>
       <div className="page-heading">
@@ -48,6 +52,11 @@ export function Products() {
           </h1>
           <p>Precios claros y stock con historial de cada movimiento.</p>
         </div>
+        {admin && (
+          <button onClick={() => setCapture(true)}>
+            Carga rápida de códigos
+          </button>
+        )}
         {admin && (
           <button
             className="primary"

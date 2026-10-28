@@ -29,6 +29,7 @@ import { management } from "./management.js";
 import { activateImportedProduct } from "./product-import.js";
 import { customerStatement, statementQuery } from "./customer-statement.js";
 import { customerStatementPdf } from "./customer-statement-pdf.js";
+import { ensureBarcodeAvailable, saveBarcode } from "./barcodes.js";
 
 export const app = express();
 app.disable("x-powered-by");
@@ -235,6 +236,7 @@ app.post("/api/products", admin, async (req, res) => {
   );
   const { stock, ...fields } = data;
   const product = await db.$transaction(async (tx) => {
+    await ensureBarcodeAvailable(tx, data.barcode);
     const p = await tx.product.create({
       data: { ...fields, barcode: data.barcode || null },
     });
@@ -286,6 +288,10 @@ app.put("/api/products/:id", admin, async (req, res) => {
   await db.$transaction(async (tx) => {
     const old = await tx.product.findUniqueOrThrow({
       where: { id: productId },
+    });
+    await ensureBarcodeAvailable(tx, data.barcode, {
+      kind: "PRODUCT",
+      id: productId,
     });
     ensure(
       old.unit === data.unit,
@@ -666,6 +672,44 @@ app.post("/api/sales/:id/void", loginLimit, async (req, res) => {
     ),
   );
 });
+
+app.get("/api/barcode-catalog", admin, async (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  const [products, imported] = await Promise.all([
+    db.product.findMany({
+      where: { active: true },
+      select: {
+        id: true,
+        name: true,
+        barcode: true,
+        unit: true,
+        category: true,
+      },
+    }),
+    db.importedProduct.findMany({
+      where: { productId: null },
+      select: { id: true, name: true, barcode: true, unit: true },
+    }),
+  ]);
+  res.json({
+    items: [
+      ...products.map((p) => ({
+        ...p,
+        key: `PRODUCT:${p.id}`,
+        kind: "PRODUCT" as const,
+      })),
+      ...imported.map((p) => ({
+        ...p,
+        key: `IMPORTED:${p.id}`,
+        kind: "IMPORTED" as const,
+        category: "Por revisar",
+      })),
+    ].sort((a, b) => a.name.localeCompare(b.name, "es")),
+  });
+});
+app.post("/api/barcodes", admin, async (req, res) =>
+  res.json(await saveBarcode(req.body, res.locals.employee.id)),
+);
 
 app.use("/api", management);
 app.use("/api", (_req, res) =>

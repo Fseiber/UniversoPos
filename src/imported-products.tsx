@@ -6,6 +6,7 @@ import { Field, Modal, NumberInput } from "./components";
 import { CategoryPicker } from "./category-picker";
 
 type Imported = {
+  barcode: string | null;
   id: number;
   name: string;
   unit: "UNIDAD" | "PESO";
@@ -195,7 +196,11 @@ export function ImportedProducts() {
                 />
               </Field>
               <Field label="Código de barras (si tiene)">
-                <input name="barcode" maxLength={80} />
+                <input
+                  name="barcode"
+                  maxLength={80}
+                  defaultValue={selected.barcode ?? ""}
+                />
               </Field>
               <Field label="Categoría">
                 <CategoryPicker />

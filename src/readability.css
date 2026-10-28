@@ -429,3 +429,51 @@
     grid-template-columns: 1fr;
   }
 }
+
+.barcode-workspace {
+  display: grid;
+  grid-template-columns: minmax(300px, 1.1fr) minmax(300px, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.barcode-results {
+  max-height: 55vh;
+  overflow: auto;
+  padding: 12px;
+}
+.barcode-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  width: 100%;
+  gap: 7px;
+  margin-bottom: 8px;
+  padding: 16px;
+  white-space: normal;
+}
+.barcode-row span {
+  font-size: 15px;
+  color: var(--muted);
+}
+.barcode-row.selected {
+  outline: 2px solid #187c60;
+}
+.barcode-scanner h2 {
+  line-height: 1.4;
+}
+.barcode-scanner input {
+  font-size: 24px;
+  letter-spacing: 1px;
+}
+.barcode-scanner form > p {
+  line-height: 1.6;
+}
+@media (max-width: 900px) {
+  .barcode-workspace {
+    grid-template-columns: 1fr;
+  }
+  .barcode-results {
+    max-height: 35vh;
+  }
+}

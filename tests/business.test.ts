@@ -868,6 +868,113 @@ await test("Productos · precio de venta sin costo de compra y margen sin gananc
     .expect(201);
   assert.equal(active.body.cost, null);
 });
+await test("Códigos · carga rápida reserva importados, conserva ceros y transfiere al habilitar", async () => {
+  await worker.get("/api/barcode-catalog").expect(403);
+  await worker.post("/api/barcodes").send({}).expect(403);
+  const source = await importCatalog(
+    {
+      sourceName: "codigos.xlsx",
+      sourceHash: "e".repeat(64),
+      sheetName: "Productos",
+      records: [
+        {
+          sourceRow: 2,
+          name: "Escaneo pendiente A",
+          unit: "UNIDAD",
+          referencePrice: 1,
+        },
+        {
+          sourceRow: 3,
+          name: "Escaneo pendiente B",
+          unit: "UNIDAD",
+          referencePrice: 2,
+        },
+      ],
+    },
+    true,
+  );
+  const [a, b] = await db.importedProduct.findMany({
+    where: { importId: source.importId },
+    orderBy: { id: "asc" },
+  });
+  const before = await db.product.count();
+  const payload = {
+    kind: "IMPORTED",
+    id: a.id,
+    barcode: "0001234567890",
+    expectedBarcode: null,
+  };
+  await admin.post("/api/barcodes").send(payload).expect(200);
+  const again = await admin.post("/api/barcodes").send(payload).expect(200);
+  assert.equal(again.body.unchanged, true);
+  assert.equal(await db.product.count(), before);
+  assert.equal(
+    (await db.importedProduct.findUniqueOrThrow({ where: { id: a.id } }))
+      .barcode,
+    payload.barcode,
+  );
+  await admin
+    .post("/api/barcodes")
+    .send({ ...payload, id: b.id })
+    .expect(409);
+  await admin
+    .post("/api/products")
+    .send({
+      name: "Código reservado",
+      price: 20,
+      stock: 0,
+      barcode: payload.barcode,
+    })
+    .expect(409);
+  await assert.rejects(
+    db.product.create({
+      data: { name: "Conflicto SQL", price: 20, barcode: payload.barcode },
+    }),
+  );
+  await admin
+    .post("/api/barcodes")
+    .send({ ...payload, barcode: "111111", replaceExisting: true })
+    .expect(409);
+  await admin
+    .post("/api/barcodes")
+    .send({ ...payload, barcode: "111111", expectedBarcode: payload.barcode })
+    .expect(409);
+  const active = await admin
+    .post(`/api/imported-products/${a.id}/activate`)
+    .send({ name: a.name, category: "Almacén", price: 50, stock: 3 })
+    .expect(201);
+  assert.equal(active.body.barcode, payload.barcode);
+  assert.equal(active.body.cost, null);
+  assert.equal(Number(active.body.stock), 3);
+  await admin
+    .post("/api/barcodes")
+    .send({ ...payload, id: b.id })
+    .expect(409);
+  await admin
+    .post("/api/barcodes")
+    .send({
+      kind: "PRODUCT",
+      id: active.body.id,
+      barcode: "0009999",
+      expectedBarcode: payload.barcode,
+      replaceExisting: true,
+    })
+    .expect(200);
+  await admin
+    .post("/api/barcodes")
+    .send({ ...payload, id: b.id })
+    .expect(200);
+  const unchanged = await db.product.findUniqueOrThrow({
+    where: { id: active.body.id },
+  });
+  assert.equal(Number(unchanged.price), 50);
+  assert.equal(Number(unchanged.stock), 3);
+  assert.equal(unchanged.cost, null);
+  await admin
+    .post("/api/barcodes")
+    .send({ ...payload, id: b.id, barcode: "12 34" })
+    .expect(400);
+});
 await test("Stock · reemplaza cantidades temporales sin sumar dos veces y conserva Kardex", async () => {
   const p = await admin
     .post("/api/products")
