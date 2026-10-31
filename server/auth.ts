@@ -60,7 +60,10 @@ export const authenticate: RequestHandler = async (req, res, next) => {
     .map((v) => v.trim())
     .find((v) => v.startsWith("universo_session="))
     ?.slice("universo_session=".length);
-  if (!raw) return res.status(401).json({ error: "Iniciá sesión" });
+  if (!raw)
+    return res
+      .status(401)
+      .json({ error: "Iniciá sesión", code: "SESSION_EXPIRED" });
   const session = await db.session.findUnique({
     where: { id: digest(raw) },
     include: { employee: true },
@@ -68,7 +71,10 @@ export const authenticate: RequestHandler = async (req, res, next) => {
   if (!session || session.expiresAt < new Date() || !session.employee.active)
     return res
       .status(401)
-      .json({ error: "La sesión venció. Ingresá nuevamente" });
+      .json({
+        error: "La sesión venció. Ingresá nuevamente",
+        code: "SESSION_EXPIRED",
+      });
   res.locals.employee = session.employee;
   res.locals.sessionId = session.id;
   next();

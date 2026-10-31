@@ -1,4 +1,10 @@
-import { useEffect, useState } from "react";
+import { Purchases } from "./purchases";
+import { PendingCredit } from "./pending-credit";
+import { creditLimitText } from "./customer-credit";
+import { CommercialReport } from "./commercial-report";
+import { RecoverySettings } from "./recovery-settings";
+import { EmployeeSettings } from "./employee-settings";
+import { useEffect, useRef, useState } from "react";
 import {
   Plus,
   Search,
@@ -16,8 +22,10 @@ import { api, currency, methodLabels, qty, today, when } from "./api";
 import { usePos } from "./context";
 import { Empty, Field, Modal, NumberInput, Stat } from "./components";
 import { Receipt } from "./sell";
+import { SaleReturn, ReturnReceipt } from "./sale-return";
 
 function useResource(url: string | null) {
+  const previousUrl = useRef<string | null>(null);
   const { version } = usePos();
   const [data, setData] = useState<any>(null),
     [error, setError] = useState(""),
@@ -26,6 +34,8 @@ function useResource(url: string | null) {
     if (!url) return;
     let active = true;
     setError("");
+    if (previousUrl.current !== url) setData(null);
+    previousUrl.current = url;
     void api(url)
       .then((d) => {
         if (active) setData(d);
@@ -49,16 +59,29 @@ function LoadState({ error }: { error: string }) {
   );
 }
 
-export function Sales() {
+export function Sales({
+  initialPendingToday = false,
+}: {
+  initialPendingToday?: boolean;
+}) {
+  const [returnReceipt, setReturnReceipt] = useState<any>(null);
+  const [creditSale, setCreditSale] = useState<any>(null);
+  const [returning, setReturning] = useState<any>(null);
+  const [filters, setFilters] = useState<Record<string, string>>(
+    (): Record<string, string> =>
+      initialPendingToday ? { from: today(), to: today() } : {},
+  );
+  const [cursors, setCursors] = useState<(number | null)[]>([null]);
   const { task, refresh, notify, customers, busy } = usePos();
-  const [onlyPending, setOnlyPending] = useState(false),
+  const [onlyPending, setOnlyPending] = useState(initialPendingToday),
     [receipt, setReceipt] = useState<any>(null),
     [settle, setSettle] = useState<any>(null),
     [voiding, setVoiding] = useState<any>(null),
     [admins, setAdmins] = useState<any[]>([]);
-  const { data, error } = useResource(
-    `/sales${onlyPending ? "?pending=true" : ""}`,
+  const { data: pageData, error } = useResource(
+    `/sales/history?${new URLSearchParams({ ...filters, ...(onlyPending ? { status: "PENDIENTE" } : {}), ...(cursors[cursors.length - 1] ? { before: String(cursors[cursors.length - 1]) } : {}) })}`,
   );
+  const data = pageData?.items;
   return (
     <>
       <div className="page-heading">
@@ -67,15 +90,70 @@ export function Sales() {
           <h1>
             La historia de tu mostrador<span className="heading-dot">.</span>
           </h1>
-          <p>Últimas 200 ventas, comprobantes y entregas pendientes.</p>
+          <p>Todas las ventas, comprobantes y entregas pendientes.</p>
         </div>
-        <button
-          className={onlyPending ? "primary" : ""}
-          onClick={() => setOnlyPending(!onlyPending)}
-        >
-          {onlyPending ? "Mostrar todas" : "Ver pendientes"}
-        </button>
+        <div className="button-row">
+          <button
+            className={onlyPending && filters.from === today() ? "primary" : ""}
+            onClick={() => {
+              setOnlyPending(true);
+              setFilters({ from: today(), to: today() });
+              setCursors([null]);
+            }}
+          >
+            Pendientes de hoy
+          </button>
+          <button
+            className={onlyPending && !filters.from ? "primary" : ""}
+            onClick={() => {
+              setOnlyPending(true);
+              setFilters({});
+              setCursors([null]);
+            }}
+          >
+            Todas las pendientes
+          </button>
+          <button
+            onClick={() => {
+              setOnlyPending(false);
+              setFilters({});
+              setCursors([null]);
+            }}
+          >
+            Todas las ventas
+          </button>
+        </div>
       </div>
+      <form
+        className="panel-toolbar history-search"
+        key={JSON.stringify(filters)}
+        onSubmit={(e) => {
+          e.preventDefault();
+          setFilters(
+            Object.fromEntries(
+              [...new FormData(e.currentTarget)]
+                .map(([k, v]) => [k, String(v)])
+                .filter(([, v]) => v),
+            ),
+          );
+          setCursors([null]);
+        }}
+      >
+        <input
+          name="q"
+          defaultValue={filters.q ?? ""}
+          aria-label="Buscar venta"
+          placeholder="Número, producto, cliente o empleado"
+          maxLength={100}
+        />
+        <Field label="Desde">
+          <input name="from" type="date" defaultValue={filters.from ?? ""} />
+        </Field>
+        <Field label="Hasta">
+          <input name="to" type="date" defaultValue={filters.to ?? ""} />
+        </Field>
+        <button>Buscar</button>
+      </form>
       <section className="panel">
         {!data || error ? (
           <LoadState error={error} />
@@ -111,6 +189,9 @@ export function Sales() {
                         {s.status}
                       </span>
                       {s.voidReason && <small>{s.voidReason}</small>}
+                      {s.stockTracked === false && (
+                        <small>Sin control de stock</small>
+                      )}
                     </td>
                     <td>
                       <b>{currency(s.total)}</b>
@@ -125,8 +206,48 @@ export function Sales() {
                     <td>
                       <div className="row-actions">
                         <button onClick={() => setReceipt(s)}>Ticket</button>
+                        {s.status === "COMPLETADA" && s.lines.length > 0 && (
+                          <button
+                            disabled={busy}
+                            onClick={() => setReturning(s)}
+                          >
+                            Devolver
+                          </button>
+                        )}
+                        {s.returns?.length > 0 && (
+                          <div>
+                            <small>
+                              Devoluciones:{" "}
+                              {currency(
+                                s.returns.reduce(
+                                  (sum: number, r: any) =>
+                                    sum + Number(r.amount),
+                                  0,
+                                ),
+                              )}
+                            </small>
+                            {s.returns.map((r: any) => (
+                              <button
+                                key={r.id}
+                                onClick={() => setReturnReceipt(r)}
+                              >
+                                Comprobante devolución #{r.id}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                         {s.status === "PENDIENTE" && (
-                          <button onClick={() => setSettle(s)}>Saldar</button>
+                          <button
+                            disabled={busy}
+                            onClick={() => setCreditSale(s)}
+                          >
+                            Pasar a fiado
+                          </button>
+                        )}
+                        {s.status === "PENDIENTE" && (
+                          <button onClick={() => setSettle(s)}>
+                            Registrar cobro
+                          </button>
                         )}
                         {s.status !== "ANULADA" && (
                           <button
@@ -163,10 +284,41 @@ export function Sales() {
           />
         )}
       </section>
+      {pageData && !error && (
+        <div className="panel-toolbar">
+          <span>
+            {pageData.total} ventas · página {cursors.length}
+          </span>
+          <button
+            disabled={cursors.length === 1 || busy}
+            onClick={() => setCursors((c) => c.slice(0, -1))}
+          >
+            Anterior
+          </button>
+          <button
+            disabled={!pageData.nextCursor || busy}
+            onClick={() => setCursors((c) => [...c, pageData.nextCursor])}
+          >
+            Siguiente
+          </button>
+        </div>
+      )}
       {receipt && <Receipt sale={receipt} onClose={() => setReceipt(null)} />}
+      {creditSale && (
+        <PendingCredit sale={creditSale} onClose={() => setCreditSale(null)} />
+      )}
+      {returnReceipt && (
+        <ReturnReceipt
+          returned={returnReceipt}
+          onClose={() => setReturnReceipt(null)}
+        />
+      )}
+      {returning && (
+        <SaleReturn sale={returning} onClose={() => setReturning(null)} />
+      )}
       {settle && (
         <Modal
-          title={`Saldar venta #${settle.id}`}
+          title={`Registrar cobro de venta #${settle.id}`}
           onClose={() => setSettle(null)}
         >
           <div className="payment-total">
@@ -174,8 +326,12 @@ export function Sales() {
             <strong>{currency(settle.total)}</strong>
           </div>
           <p>
-            El stock ya fue descontado al entregar. El pago se registra en la
-            caja actual.
+            {settle.stockTracked === false
+              ? "Esta venta no modifica stock."
+              : "El stock ya fue descontado al entregar."}{" "}
+            El pago se registra en la caja actual. Si ya te transfirió, elegí
+            Transferencia y confirmá el cobro después de verificar la
+            acreditación.
           </p>
           <form
             onSubmit={(e) => {
@@ -192,7 +348,7 @@ export function Sales() {
                 });
                 setSettle(null);
                 await refresh();
-                notify("Venta pendiente saldada");
+                notify("Cobro registrado. La venta quedó completada");
               });
             }}
           >
@@ -227,8 +383,8 @@ export function Sales() {
           onClose={() => setVoiding(null)}
         >
           <p>
-            Restaura stock y revierte efectivo o deuda. Requiere autorización de
-            un administrador.
+            Revierte efectivo o deuda. Repone stock solo si la venta original lo
+            descontó. Requiere autorización de un administrador.
           </p>
           {voiding.payments.some(
             (p: any) => !["EFECTIVO", "CUENTA_CORRIENTE"].includes(p.method),
@@ -320,6 +476,7 @@ export function Catalog() {
           </button>
         </div>
       </div>
+      <Purchases />
       <div className="two-columns">
         <section className="panel">
           <div className="panel-toolbar">
@@ -530,7 +687,19 @@ function downloadCsv(data: any) {
     ["EL UNIVERSO - RESUMEN", `${data.from} a ${data.to}`],
     ["Ventas", data.total],
     ["Cantidad de ventas", data.salesCount],
-    ["Margen estimado", data.margin],
+    [data.hasUnknownCosts ? "Margen parcial" : "Margen estimado", data.margin],
+    ["Devoluciones del período", data.returnedAmount],
+    ["Inventario al costo conocido", data.inventoryValue],
+    [
+      "Productos con costo / activos",
+      `${data.inventoryCostCoverage.known}/${data.inventoryCostCoverage.total}`,
+    ],
+    ["Gastos de caja clasificados", data.expenses],
+    ["Salidas sin clasificar", data.unclassifiedOutflows],
+    [
+      "Margen conocido menos gastos (parcial)",
+      new Decimal(data.margin).minus(data.expenses).toFixed(2),
+    ],
     ["Ventas rápidas sin costo conocido", data.quick],
     ["Ventas sin costo de compra conocido", data.unknownCostRevenue],
     ["Saldo actual fiados", data.totalDebt],
@@ -548,6 +717,28 @@ function downloadCsv(data: any) {
     [""],
     ["Producto", "Cantidad", "Venta"],
     ...data.top.map((p: any) => [p.name, p.quantity, p.amount]),
+    ...[
+      ["Ventas netas por cajero", data.byEmployee],
+      ["Ventas netas por hora", data.byHour],
+      ["Productos por categoría (sin recargos)", data.byCategory],
+      ["Cobros de fiado por medio", data.debtCollectionsByMethod],
+      ["Deuda con proveedores", data.supplierDebt],
+    ].flatMap(([title, entries]: any) => [
+      [""],
+      [title, "Importe"],
+      ...entries.map((r: any) => [r.name, r.amount]),
+    ]),
+    [""],
+    ["Cliente", "Deuda", "Días de deuda más antigua", "Último pago"],
+    ...data.debtAging.map((c: any) => [
+      c.name,
+      c.balance,
+      c.days,
+      c.lastPayment ?? "Sin pagos",
+    ]),
+    [""],
+    ["Producto sin ventas en el período", "Stock actual"],
+    ...data.noSalesInPeriod.map((p: any) => [p.name, p.stock]),
     [""],
     [data.note],
   ];
@@ -647,19 +838,19 @@ export function Reports() {
           </div>
           <div className="stats four">
             <Stat
-              label="Ventas del período"
+              label="Ventas netas de devoluciones"
               value={currency(data.total)}
-              detail={`${data.salesCount} operaciones · pendientes ${currency(data.pending)}`}
+              detail={`${data.salesCount} operaciones · devoluciones ${currency(data.returnedAmount ?? 0)} · pendientes ${currency(data.pending)}`}
             />
             <Stat
               label={
-                Number(data.unknownCostRevenue) > 0
+                data.hasUnknownCosts || Number(data.unknownCostRevenue) !== 0
                   ? "Margen parcial"
                   : "Margen estimado"
               }
               value={currency(data.margin)}
               detail={
-                Number(data.unknownCostRevenue) > 0
+                data.hasUnknownCosts || Number(data.unknownCostRevenue) !== 0
                   ? `${currency(data.unknownCostRevenue)} vendidos sin costo conocido`
                   : "Costos históricos y recargos"
               }
@@ -777,7 +968,7 @@ export function Reports() {
                         <tr key={c.id}>
                           <td>{c.name}</td>
                           <td className="negative">{currency(c.balance)}</td>
-                          <td>{currency(c.creditLimit)}</td>
+                          <td>{creditLimitText(c)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -824,6 +1015,7 @@ export function Reports() {
               </table>
             </div>
           </section>
+          <CommercialReport data={data} />
           <p className="report-note">
             {data.note} Ventas rápidas: {currency(data.quick)} sin costo
             identificado.
@@ -889,10 +1081,33 @@ export function Admin({ auditMode }: { auditMode: boolean }) {
   const employees = useResource("/employees"),
     backups = useResource("/backups");
   const [query, setQuery] = useState(""),
-    [appliedQuery, setAppliedQuery] = useState(""),
-    [before, setBefore] = useState<number | undefined>();
+    [appliedQuery, setAppliedQuery] = useState("");
+  const [auditFilters, setAuditFilters] = useState({
+    employeeId: "",
+    action: "",
+    from: "",
+    to: "",
+    sort: "date",
+    direction: "desc",
+  });
+  const [auditOffset, setAuditOffset] = useState(0);
+  const auditOptions = useResource(auditMode ? "/audit/options" : null);
+  const changeAudit = (patch: Partial<typeof auditFilters>) => {
+    setAuditFilters((f) => ({ ...f, ...patch }));
+    setAuditOffset(0);
+  };
+  const sortAudit = (sort: string) =>
+    changeAudit({
+      sort,
+      direction:
+        auditFilters.sort === sort && auditFilters.direction === "asc"
+          ? "desc"
+          : "asc",
+    });
   const logs = useResource(
-    `/audit?q=${encodeURIComponent(appliedQuery)}${before ? `&before=${before}` : ""}`,
+    auditMode
+      ? `/audit?${new URLSearchParams({ page: "true", q: appliedQuery, offset: String(auditOffset), ...Object.fromEntries(Object.entries(auditFilters).filter(([, v]) => v)) })}`
+      : null,
   );
   const [modal, setModal] = useState<"employee" | any | null>(null),
     [reconciliation, setReconciliation] = useState<any>(null);
@@ -912,44 +1127,134 @@ export function Admin({ auditMode }: { auditMode: boolean }) {
           </div>
         </div>
         <form
-          className="inline-form"
+          className="audit-filters"
           onSubmit={(e) => {
             e.preventDefault();
             setAppliedQuery(query);
-            setBefore(undefined);
+            setAuditOffset(0);
           }}
         >
           <input
             aria-label="Filtrar auditoría"
-            placeholder="Buscar acción, entidad o detalle…"
+            placeholder="Buscar empleado, acción o detalle…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
           <button className="primary">
             <Search size={17} /> Buscar
           </button>
+          <Field label="Empleado">
+            <select
+              value={auditFilters.employeeId}
+              onChange={(e) => changeAudit({ employeeId: e.target.value })}
+            >
+              <option value="">Todos</option>
+              {employees.data?.map((e: any) => (
+                <option key={e.id} value={e.id}>
+                  {e.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Acción">
+            <select
+              value={auditFilters.action}
+              onChange={(e) => changeAudit({ action: e.target.value })}
+            >
+              <option value="">Todas</option>
+              {auditOptions.data?.actions.map((a: string) => (
+                <option key={a} value={a}>
+                  {a}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Desde">
+            <input
+              type="date"
+              value={auditFilters.from}
+              onChange={(e) => changeAudit({ from: e.target.value })}
+            />
+          </Field>
+          <Field label="Hasta">
+            <input
+              type="date"
+              value={auditFilters.to}
+              onChange={(e) => changeAudit({ to: e.target.value })}
+            />
+          </Field>
+          <button
+            type="button"
+            onClick={() => {
+              setQuery("");
+              setAppliedQuery("");
+              changeAudit({
+                employeeId: "",
+                action: "",
+                from: "",
+                to: "",
+                sort: "date",
+                direction: "desc",
+              });
+            }}
+          >
+            Limpiar filtros
+          </button>
         </form>
+        {logs.data && (
+          <p>
+            {logs.data.total} registros · Página{" "}
+            {Math.floor(auditOffset / 100) + 1}. Tocá Fecha, Empleado o Acción
+            para ordenar.
+          </p>
+        )}
         <section className="panel">
           {logs.data ? (
             <div className="table-scroll">
               <table>
                 <thead>
                   <tr>
-                    <th>Fecha</th>
-                    <th>Empleado</th>
-                    <th>Acción</th>
+                    {[
+                      ["date", "Fecha"],
+                      ["employee", "Empleado"],
+                      ["action", "Acción"],
+                    ].map(([key, label]) => (
+                      <th
+                        key={key}
+                        aria-sort={
+                          auditFilters.sort === key
+                            ? auditFilters.direction === "asc"
+                              ? "ascending"
+                              : "descending"
+                            : "none"
+                        }
+                      >
+                        <button
+                          className="sort-button"
+                          onClick={() => sortAudit(key)}
+                        >
+                          {label}{" "}
+                          {auditFilters.sort === key
+                            ? auditFilters.direction === "asc"
+                              ? "↑"
+                              : "↓"
+                            : "↕"}
+                        </button>
+                      </th>
+                    ))}
                     <th>Entidad / detalle</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {logs.data.map((l: any) => (
+                  {logs.data.items.map((l: any) => (
                     <tr key={l.id}>
                       <td>
                         {new Date(l.createdAt).toLocaleString("es-AR", {
                           timeZone: "America/Argentina/Buenos_Aires",
+                          hour12: false,
                         })}
                       </td>
-                      <td>{l.employeeId ? `#${l.employeeId}` : "Sistema"}</td>
+                      <td>{l.employeeName}</td>
                       <td>
                         <span className="badge">{l.action}</span>
                       </td>
@@ -967,14 +1272,17 @@ export function Admin({ auditMode }: { auditMode: boolean }) {
           )}
         </section>
         <div className="button-row">
-          <button disabled={!before} onClick={() => setBefore(undefined)}>
-            Más recientes
+          <button
+            disabled={auditOffset === 0}
+            onClick={() => setAuditOffset((n) => Math.max(0, n - 100))}
+          >
+            Página anterior
           </button>
           <button
-            disabled={logs.data?.length !== 100}
-            onClick={() => setBefore(logs.data.at(-1).id)}
+            disabled={!logs.data?.hasMore}
+            onClick={() => setAuditOffset((n) => n + 100)}
           >
-            Anteriores
+            Página siguiente
           </button>
         </div>
       </>
@@ -991,6 +1299,8 @@ export function Admin({ auditMode }: { auditMode: boolean }) {
           <p>Accesos, respaldo de datos y controles de consistencia.</p>
         </div>
       </div>
+      <RecoverySettings />
+      <EmployeeSettings />
       <div className="two-columns">
         <section className="panel">
           <div className="panel-toolbar">
@@ -1052,6 +1362,16 @@ export function Admin({ auditMode }: { auditMode: boolean }) {
               <>
                 <small>Carpeta configurada</small>
                 <code>{backups.data.directory}</code>
+                <p>
+                  Copia externa:{" "}
+                  {backups.data.externalDirectory ?? "Sin configurar"}
+                </p>
+                {backups.data.externalSuccess && (
+                  <p>
+                    Última copia externa verificada:{" "}
+                    {when(backups.data.externalSuccess)}
+                  </p>
+                )}
                 <p>
                   Último respaldo de esta ejecución:{" "}
                   {backups.data.lastSuccess

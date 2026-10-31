@@ -21,7 +21,10 @@
     "db:local:stop": "tsx scripts/postgres-local.ts stop",
     "db:import-sqlite": "tsx scripts/import-sqlite.ts",
     "db:backup": "tsx scripts/backup.ts",
-    "db:check": "tsx scripts/check-database.ts"
+    "db:check": "tsx scripts/check-database.ts",
+    "db:restore": "tsx scripts/restore.ts",
+    "startup:install": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-shortcuts.ps1",
+    "startup:remove": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-shortcuts.ps1 -RemoveStartup"
   },
   "dependencies": {
     "@prisma/client": "6.19.3",

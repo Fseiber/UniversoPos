@@ -1,7 +1,7 @@
 :root {
   font-family: Inter, "Segoe UI", Arial, sans-serif;
-  color: #22372e;
-  background: #f5f6f2;
+  color: var(--ink);
+  background: var(--bg);
   font-synthesis: none;
   font-weight: 400;
   font-size: 14px;

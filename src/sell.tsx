@@ -1,3 +1,9 @@
+import { availableCreditText } from "./customer-credit";
+import { CategoryArt, categoryTheme } from "./category-art";
+import { whatsappLink } from "./whatsapp";
+import { registerCheckout } from "./checkout-recovery";
+import { AuthorizationFields } from "./authorization";
+import { ApiError } from "./api";
 import { useEffect, useRef, useState } from "react";
 import Decimal from "decimal.js";
 import {
@@ -15,11 +21,13 @@ import {
   Printer,
   Send,
 } from "lucide-react";
-import { api, currency, methodLabels, qty, type Product } from "./api";
+import { api, currency, methodLabels, qty, when, type Product } from "./api";
 import { usePos } from "./context";
 import { Empty, Field, Modal, NumberInput } from "./components";
 import { initialPaymentMethod, quickAmountKey } from "./checkout-input";
 import { formatNumericInput } from "./numeric-input";
+import { CustomerReminders } from "./customer-reminders";
+import { ProductReminders } from "./product-reminders";
 
 type Cart = {
   key: string;
@@ -54,11 +62,16 @@ export function cartLines(cart: Cart, products: Product[]) {
   });
 }
 export function Receipt({ sale, onClose }: { sale: any; onClose: () => void }) {
+  const [paper, setPaper] = useState("80");
   const { notify, task } = usePos();
-  const text = `EL UNIVERSO\nComprobante interno #${sale.id}\n${sale.lines.map((l: any) => `${qty(l.quantity)} × ${l.name} · ${currency(l.total)}`).join("\n")}${Number(sale.quickAmount) ? `\nVenta rápida: ${currency(sale.quickAmount)}` : ""}\nRecargo: ${currency(sale.surcharge)}\nTOTAL: ${currency(sale.total)}\n${sale.payments.map((p: any) => `${methodLabels[p.method]}: ${currency(p.amount)}`).join("\n")}\n${sale.status === "PENDIENTE" ? `PENDIENTE · ${sale.pendingName}` : "Gracias por tu compra"}\nNo válido como factura fiscal.`;
+  const text = `EL UNIVERSO\nFecha: ${when(sale.createdAt)}\nCajero: ${sale.employee?.name ?? "Sin identificar"}\nCliente: ${sale.customer?.name ?? sale.pendingName ?? "Consumidor final"}\nComprobante interno #${sale.id}\n${sale.lines.map((l: any) => `${qty(l.quantity)} × ${l.name} · ${currency(l.total)}`).join("\n")}${Number(sale.quickAmount) ? `\nVenta rápida: ${currency(sale.quickAmount)}` : ""}\nRecargo: ${currency(sale.surcharge)}\nTOTAL: ${currency(sale.total)}\n${sale.payments.map((p: any) => `${methodLabels[p.method]}: ${currency(p.amount)}`).join("\n")}\n${sale.status === "PENDIENTE" ? `PENDIENTE · ${sale.pendingName}` : "Gracias por tu compra"}\nNo válido como factura fiscal.`;
+  const stockNotice =
+    sale.stockTracked === false
+      ? "Venta sin control de stock. No modifica existencias."
+      : "Venta con control de stock.";
   return (
     <Modal title={`Venta #${sale.id}`} onClose={onClose}>
-      <div className="receipt print-scope">
+      <div className={`receipt print-scope thermal-${paper}`}>
         <CheckCircle2 size={36} />
         <h2>
           {sale.status === "PENDIENTE"
@@ -67,12 +80,20 @@ export function Receipt({ sale, onClose }: { sale: any; onClose: () => void }) {
         </h2>
         <p>
           {sale.status === "PENDIENTE"
-            ? "El stock se descontó. El dinero se registra cuando la saldes."
-            : "Stock, pagos y cuenta corriente actualizados."}
+            ? `${sale.stockTracked === false ? "No se modificó stock." : "El stock se descontó."} El dinero se registra cuando confirmes el cobro.`
+            : "Pagos y cuenta corriente actualizados."}
         </p>
+        <p>{stockNotice}</p>
         <pre>{text}</pre>
       </div>
       <div className="button-row no-print">
+        <Field label="Ancho del ticket">
+          <select value={paper} onChange={(e) => setPaper(e.target.value)}>
+            <option value="58">Térmica 58 mm</option>
+            <option value="80">Térmica 80 mm</option>
+            <option value="a4">Hoja / PDF</option>
+          </select>
+        </Field>
         <button
           onClick={() =>
             void task(async () => {
@@ -90,7 +111,7 @@ export function Receipt({ sale, onClose }: { sale: any; onClose: () => void }) {
           className="button"
           target="_blank"
           rel="noreferrer"
-          href={`https://wa.me/?text=${encodeURIComponent(text)}`}
+          href={whatsappLink(text, sale.customer?.phone)}
         >
           <Send size={16} /> WhatsApp
         </a>
@@ -103,11 +124,34 @@ export function Receipt({ sale, onClose }: { sale: any; onClose: () => void }) {
 }
 
 export function Sell({ onOpenCash }: { onOpenCash: () => void }) {
-  const { products, customers, shift, task, refresh, busy } = usePos();
+  const [approval, setApproval] = useState<any>();
+  const [priceNotice, setPriceNotice] = useState("");
+  const previousPrices = useRef(new Map<number, string>());
+  const [pendingPayload, setPendingPayload] = useState<any>(() => {
+    try {
+      return JSON.parse(
+        localStorage.getItem("universo-pending-sale") ?? "null",
+      );
+    } catch {
+      return null;
+    }
+  });
+  const {
+    products,
+    customers,
+    shift,
+    task,
+    refresh,
+    busy,
+    employee,
+    stockSettings,
+  } = usePos();
   const [carts, setCarts] = useState<Cart[]>(() => {
     try {
       const stored = JSON.parse(
-        sessionStorage.getItem("universo-carts") ?? "null",
+        localStorage.getItem("universo-carts") ??
+          sessionStorage.getItem("universo-carts") ??
+          "null",
       );
       if (
         Array.isArray(stored) &&
@@ -119,6 +163,7 @@ export function Sell({ onOpenCash }: { onOpenCash: () => void }) {
     return [newCart(1)];
   });
   const [selected, setSelected] = useState(0),
+    [visibleProducts, setVisibleProducts] = useState(100),
     [search, setSearch] = useState(""),
     [category, setCategory] = useState("Todos");
   const [modal, setModal] = useState<"pay" | "quick" | "pending" | null>(null),
@@ -142,9 +187,27 @@ export function Sell({ onOpenCash }: { onOpenCash: () => void }) {
   const surcharge = subtotal.mul(cart.surcharge).div(100).toDecimalPlaces(2);
   const total = subtotal.plus(surcharge);
   useEffect(() => {
-    sessionStorage.setItem("universo-carts", JSON.stringify(carts));
+    const changed = products.filter(
+      (p) =>
+        cart.items.some((i) => i.productId === p.id) &&
+        previousPrices.current.has(p.id) &&
+        previousPrices.current.get(p.id) !== JSON.stringify([p.price, p.rules]),
+    );
+    previousPrices.current = new Map(
+      products.map((p) => [p.id, JSON.stringify([p.price, p.rules])]),
+    );
+    if (changed.length) {
+      setPriceNotice(
+        `Se actualizaron los precios de: ${changed.map((p) => p.name).join(", ")}. Revisá el total antes de cobrar.`,
+      );
+      setModal(null);
+    }
+  }, [products]);
+  useEffect(() => {
+    localStorage.setItem("universo-carts", JSON.stringify(carts));
   }, [carts]);
   function update(change: Partial<Cart>) {
+    if (pendingPayload) return;
     setCarts((cs) =>
       cs.map((c, i) => (i === selected ? { ...c, ...change } : c)),
     );
@@ -171,6 +234,7 @@ export function Sell({ onOpenCash }: { onOpenCash: () => void }) {
         .includes(search.toLocaleLowerCase("es")),
   );
   const categories = ["Todos", ...new Set(products.map((p) => p.category))];
+  useEffect(() => setVisibleProducts(100), [search, category]);
   function openPayment() {
     setPayments([
       {
@@ -182,9 +246,14 @@ export function Sell({ onOpenCash }: { onOpenCash: () => void }) {
     setModal("pay");
   }
   async function save(pendingName?: string) {
-    const result = await api("/sales", "POST", {
+    const payload = pendingPayload ?? {
       requestKey: cart.key,
-      items: cart.items,
+      expectedStockEnabled: stockSettings.stockEnabled,
+      items: lines.map((l) => ({
+        productId: l.productId,
+        quantity: l.quantity,
+        expectedUnitPrice: Number(l.price),
+      })),
       quickAmount: cart.quickAmount,
       surchargePercent: cart.surcharge,
       customerId: cart.customerId ? Number(cart.customerId) : undefined,
@@ -193,12 +262,33 @@ export function Sell({ onOpenCash }: { onOpenCash: () => void }) {
         : {
             payments: payments.map((p) => ({ ...p, amount: Number(p.amount) })),
           }),
-    });
+    };
+    localStorage.setItem("universo-pending-sale", JSON.stringify(payload));
+    setPendingPayload(payload);
+    let result;
+    try {
+      result = await registerCheckout(payload, approval);
+    } catch (error) {
+      if (
+        error instanceof ApiError &&
+        error.status < 500 &&
+        error.status !== 401
+      ) {
+        localStorage.removeItem("universo-pending-sale");
+        setPendingPayload(null);
+        await refresh().catch(() => {});
+        throw error;
+      }
+      throw error;
+    }
+    localStorage.removeItem("universo-pending-sale");
+    setPendingPayload(null);
+    setApproval(undefined);
     setModal(null);
     setReceipt(result);
     setCarts((cs) =>
       cs.map((c, i) =>
-        i === selected
+        c.key === payload.requestKey
           ? newCart(Number(c.name.replace(/\D/g, "")) || selected + 1)
           : c,
       ),
@@ -212,6 +302,22 @@ export function Sell({ onOpenCash }: { onOpenCash: () => void }) {
   const customer = customers.find((c) => c.id === Number(cart.customerId));
   return (
     <>
+      {pendingPayload && (
+        <div className="notice amber">
+          <strong>
+            Hay un cobro pendiente de verificar. El carrito está protegido.
+          </strong>
+          <button disabled={busy} onClick={() => void task(() => save())}>
+            Verificar / reintentar la misma operación
+          </button>
+        </div>
+      )}
+      {priceNotice && (
+        <div className="notice amber" role="alert">
+          {priceNotice}
+          <button onClick={() => setPriceNotice("")}>Revisado</button>
+        </div>
+      )}
       {!shift && (
         <div className="notice amber">
           <WalletIcon /> Abrí la caja para registrar ventas.
@@ -273,11 +379,13 @@ export function Sell({ onOpenCash }: { onOpenCash: () => void }) {
           </div>
           {filtered.length ? (
             <div className="product-grid">
-              {filtered.map((p, i) => (
+              {filtered.slice(0, visibleProducts).map((p, i) => (
                 <button
                   className="product-card"
                   key={p.id}
-                  disabled={Number(p.stock) <= 0 || busy}
+                  disabled={
+                    (stockSettings.stockEnabled && Number(p.stock) <= 0) || busy
+                  }
                   onClick={() => {
                     if (p.unit === "PESO") {
                       setWeight(p);
@@ -286,8 +394,14 @@ export function Sell({ onOpenCash }: { onOpenCash: () => void }) {
                     } else add(p);
                   }}
                 >
-                  <div className={`product-art tone-${i % 5}`}>
-                    <Package size={33} strokeWidth={1.2} />
+                  <div
+                    className="product-art category-illustration"
+                    style={{
+                      backgroundColor: categoryTheme(p.category).paper,
+                      color: categoryTheme(p.category).text,
+                    }}
+                  >
+                    <CategoryArt category={p.category} />
                     <span>
                       {p.unit === "PESO"
                         ? "POR KILO"
@@ -305,13 +419,20 @@ export function Sell({ onOpenCash }: { onOpenCash: () => void }) {
                         {currency(p.price)}
                         {p.unit === "PESO" && <small> / kg</small>}
                       </b>
-                      <span
-                        className={
-                          Number(p.stock) <= Number(p.minimum) ? "low" : ""
-                        }
-                      >
-                        {qty(p.stock)} {p.unit === "PESO" ? "kg" : "disp."}
-                      </span>
+                      {stockSettings.stockEnabled && (
+                        <span
+                          className={
+                            stockSettings.stockEnabled &&
+                            Number(p.stock) <= Number(p.minimum)
+                              ? "low"
+                              : ""
+                          }
+                        >
+                          {stockSettings.stockEnabled
+                            ? `${qty(p.stock)} ${p.unit === "PESO" ? "kg" : "disp."}`
+                            : "Sin control de stock"}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </button>
@@ -332,6 +453,11 @@ export function Sell({ onOpenCash }: { onOpenCash: () => void }) {
             />
           )}
           <div className="pos-footer">
+            {filtered.length > visibleProducts && (
+              <button onClick={() => setVisibleProducts((v) => v + 100)}>
+                Mostrar 100 más ({visibleProducts} de {filtered.length})
+              </button>
+            )}
             <span>
               <i /> Los cambios se guardan al confirmar la venta
             </span>
@@ -349,6 +475,7 @@ export function Sell({ onOpenCash }: { onOpenCash: () => void }) {
                 {carts.length > 1 && (
                   <button
                     aria-label={`Cerrar ${c.name}`}
+                    disabled={Boolean(pendingPayload)}
                     onClick={() => {
                       if (
                         (c.items.length || c.quickAmount) &&
@@ -369,7 +496,7 @@ export function Sell({ onOpenCash }: { onOpenCash: () => void }) {
             <button
               className="tab-add"
               aria-label="Agregar otro cliente"
-              disabled={carts.length >= 8}
+              disabled={carts.length >= 8 || Boolean(pendingPayload)}
               onClick={() => {
                 setCarts((cs) => [...cs, newCart(cs.length + 1)]);
                 setSelected(carts.length);
@@ -386,6 +513,7 @@ export function Sell({ onOpenCash }: { onOpenCash: () => void }) {
             <button
               className="icon-button"
               aria-label="Vaciar carrito"
+              disabled={Boolean(pendingPayload)}
               onClick={() => {
                 if (window.confirm("¿Vaciar este carrito?"))
                   update(newCart(selected + 1));
@@ -515,6 +643,10 @@ export function Sell({ onOpenCash }: { onOpenCash: () => void }) {
             )}
           </div>
           <div className="cart-summary">
+            <ProductReminders ids={cart.items.map((i) => i.productId)} />
+            {cart.customerId && (
+              <CustomerReminders customerId={Number(cart.customerId)} />
+            )}
             <Field label="Cliente / cuenta corriente">
               <select
                 value={cart.customerId}
@@ -530,10 +662,7 @@ export function Sell({ onOpenCash }: { onOpenCash: () => void }) {
             </Field>
             {customer && (
               <small className="credit-hint">
-                Crédito disponible:{" "}
-                {currency(
-                  dec(customer.creditLimit).minus(customer.balance).toNumber(),
-                )}
+                Crédito disponible: {availableCreditText(customer)}
               </small>
             )}
             <div className="totals">
@@ -667,8 +796,11 @@ export function Sell({ onOpenCash }: { onOpenCash: () => void }) {
       {modal === "pending" && (
         <Modal title="Dejar venta pendiente" onClose={() => setModal(null)}>
           <p>
-            La mercadería se descuenta ahora. El pago se registra al saldar
-            desde el historial.
+            {stockSettings.stockEnabled
+              ? "La mercadería se descuenta ahora."
+              : "Esta venta no modifica stock."}{" "}
+            El pago queda pendiente. Lo podés registrar desde Pendientes de hoy
+            o Historial de ventas → Todas las pendientes.
           </p>
           <form
             onSubmit={(e) => {
@@ -678,7 +810,13 @@ export function Sell({ onOpenCash }: { onOpenCash: () => void }) {
             }}
           >
             <Field label="Nombre o apodo">
-              <input name="name" maxLength={80} required autoFocus />
+              <input
+                name="name"
+                maxLength={80}
+                required
+                autoFocus
+                defaultValue={customer?.name ?? ""}
+              />
             </Field>
             <button className="primary full" disabled={busy}>
               Guardar pendiente
@@ -699,6 +837,9 @@ export function Sell({ onOpenCash }: { onOpenCash: () => void }) {
             }}
           >
             <div className="payment-rows">
+              {employee.role !== "ADMIN" && cart.surcharge > 0 && (
+                <AuthorizationFields onChange={setApproval} />
+              )}
               {payments.map((p, i) => (
                 <div className="payment-row" key={i}>
                   <Field label="Medio de pago">
@@ -764,7 +905,7 @@ export function Sell({ onOpenCash }: { onOpenCash: () => void }) {
             {payments.some((p) => p.method === "CUENTA_CORRIENTE") && (
               <div className={`notice ${customer ? "amber" : "error"}`}>
                 {customer
-                  ? `${customer.name} · crédito disponible ${currency(dec(customer.creditLimit).minus(customer.balance).toNumber())}`
+                  ? `${customer.name} · crédito disponible ${availableCreditText(customer)}`
                   : "Elegí un cliente en el carrito para registrar fiado."}
               </div>
             )}

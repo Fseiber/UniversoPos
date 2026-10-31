@@ -1,0 +1,431 @@
+/* La apariencia usa pares de fondo/texto calculados también para colores personalizados. */
+:root {
+  --accent-contrast: #ffffff;
+  --accent-text: #2c624b;
+  --accent-hover: #24513e;
+  --accent-soft-text: #24513e;
+  --elevated: #edf1f5;
+  --sidebar-ink: #e2e8f0;
+  --sidebar-muted: #b4bfce;
+  --sidebar-accent: #b9dac7;
+  --nav-active: #dce9cf;
+  --nav-active-text: #233e2d;
+  --danger-soft: #fff0f2;
+  --warning-soft: #fff3d6;
+}
+html,
+body,
+.app,
+.app main,
+.login-form {
+  background: var(--bg);
+  color: var(--ink);
+}
+.app .topbar,
+.panel,
+.stat,
+.cart,
+.product-card,
+.modal {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--border);
+}
+h1,
+h2,
+h3,
+.stat > strong,
+td,
+td > strong,
+.list-row strong {
+  color: inherit;
+}
+p,
+small,
+.muted,
+.stat > div,
+.stat > small,
+.search-box,
+.search-box kbd,
+.breadcrumb,
+.header-info,
+.empty > svg,
+.product-info > small,
+.cart-item small {
+  color: var(--muted);
+}
+input,
+select,
+textarea {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--border);
+}
+textarea {
+  font: inherit;
+  width: 100%;
+  border-radius: 8px;
+  padding: 12px;
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--accent-text);
+  box-shadow: 0 0 0 3px var(--soft);
+}
+button:focus-visible,
+a:focus-visible {
+  outline-color: var(--accent-text);
+}
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--green);
+}
+.search-box input {
+  background: transparent;
+  border: 0;
+}
+.cart-tabs,
+th,
+[data-theme="dark"] th,
+[data-theme="dark"] .cart-tabs {
+  background: var(--elevated);
+  color: var(--muted);
+}
+.cart-tabs > div.selected {
+  background: var(--surface);
+}
+.totals .grand-total {
+  border-color: var(--border);
+  color: var(--ink);
+}
+.primary,
+.button.primary {
+  background: var(--green);
+  color: var(--accent-contrast);
+  border-color: var(--accent-text);
+}
+.primary:hover,
+.button.primary:hover {
+  background: var(--accent-hover);
+  color: var(--accent-contrast);
+}
+.text-button,
+.positive,
+.heading-dot,
+.receipt > svg,
+.cart-title svg,
+.stat > div svg,
+.credit-hint,
+.rank,
+.quantity button,
+.app .stock-mode-button.enabled {
+  color: var(--accent-text);
+}
+.badge {
+  color: var(--accent-soft-text);
+}
+.product-info div > span,
+.cart-footnote,
+.pos-footer,
+.section-line h3 span,
+.empty > svg {
+  color: var(--muted);
+}
+.cart-tabs i,
+.bar-row i {
+  background: var(--green);
+}
+.progress {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--accent-text),
+    transparent
+  );
+}
+.app .category-tabs button.selected,
+[data-theme="dark"] .app .category-tabs button.selected {
+  background: var(--green);
+  color: var(--accent-contrast);
+}
+.badge.green,
+.notice.success,
+[data-theme="dark"] .badge.green,
+[data-theme="dark"] .notice.success {
+  background: var(--soft);
+  color: var(--accent-soft-text);
+}
+.badge.amber,
+.notice.amber,
+.app .stock-mode-button.disabled,
+[data-theme="dark"] .badge.amber,
+[data-theme="dark"] .notice.amber {
+  background: var(--warning-soft);
+  color: var(--amber);
+}
+.badge.red,
+.notice.error,
+[data-theme="dark"] .badge.red,
+[data-theme="dark"] .notice.error {
+  background: var(--danger-soft);
+  color: var(--red);
+}
+.negative,
+.danger.subtle {
+  color: var(--red);
+}
+.danger:not(.subtle) {
+  background: #ad2336;
+  color: #ffffff;
+  border-color: #ad2336;
+}
+.danger:not(.subtle):hover {
+  background: #8f1b2b;
+  color: #ffffff;
+}
+.danger.subtle {
+  background: transparent;
+}
+.product-card:hover {
+  border-color: var(--accent-text);
+}
+[data-theme="dark"] .product-art {
+  filter: none;
+}
+.card-add {
+  background: var(--surface);
+  color: var(--accent-text);
+}
+.sidebar,
+.login-story {
+  background: var(--sidebar);
+  color: var(--sidebar-ink);
+}
+.sidebar .brand,
+.sidebar .user strong,
+.login-story h1 {
+  color: var(--sidebar-ink);
+}
+.sidebar .brand > svg,
+.sidebar .brand small,
+.sidebar .user > button,
+.login-story .brand,
+.login-story h1 em {
+  color: var(--sidebar-accent);
+}
+.sidebar nav button,
+.sidebar .theme,
+.sidebar .user small,
+.sidebar .sync-time,
+.sidebar .local-status,
+.sidebar .nav-label,
+.login-story p,
+.login-story > small {
+  color: var(--sidebar-muted);
+}
+.sidebar nav button:hover,
+.sidebar .theme:hover {
+  color: var(--sidebar-ink);
+  background: #ffffff12;
+}
+.sidebar nav button.active {
+  background: var(--nav-active);
+  color: var(--nav-active-text);
+}
+.nav-dot,
+.local-status i {
+  background: var(--sidebar-accent);
+}
+.avatar {
+  background: var(--nav-active);
+  color: var(--nav-active-text);
+}
+.sidebar .theme {
+  background: transparent;
+  border-color: #ffffff30;
+}
+.sidebar .user {
+  border-color: #ffffff25;
+}
+.login-story:before {
+  border-color: #ffffff22;
+}
+.appearance-preview {
+  padding: 20px;
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.appearance-preview p {
+  margin: 8px 0 14px;
+}
+.appearance-preview .badge {
+  margin-left: 12px;
+}
+.accent-presets {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 14px 0 20px;
+}
+.accent-presets button {
+  justify-content: flex-start;
+  font-size: 14px;
+  padding: 10px 6px;
+  gap: 6px;
+}
+.accent-presets button[aria-pressed="true"] {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 1px;
+}
+.accent-swatch {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid #80808080;
+}
+.accent-color-input {
+  min-height: 46px;
+  padding: 4px;
+  cursor: pointer;
+}
+.login {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 28px 20px;
+  background: var(--bg);
+  color: var(--ink);
+}
+.login .login-form {
+  width: 440px;
+  max-width: 100%;
+  margin: 0;
+  padding: 32px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+}
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.login-mark {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 14px;
+  background: var(--soft);
+  color: var(--accent-soft-text);
+}
+.login-brand strong {
+  display: block;
+  font-size: 22px;
+  letter-spacing: -0.4px;
+}
+.login-brand small {
+  display: block;
+  font-size: 13px;
+  margin-top: 2px;
+}
+.login .login-form h2 {
+  font-size: 26px;
+  line-height: 1.25;
+  margin-bottom: 10px;
+}
+.login .login-form > p {
+  font-size: 15px;
+  margin-bottom: 26px;
+}
+.login .field > span {
+  font-size: 14px;
+}
+.login input,
+.login select {
+  min-height: 48px;
+  font-size: 16px;
+}
+.login .login-form form button {
+  min-height: 50px;
+  font-size: 16px;
+  width: 100%;
+}
+.login .login-form > small {
+  margin-top: 22px;
+  font-size: 12px;
+}
+@media (max-width: 480px) {
+  .login {
+    padding: 20px 14px;
+  }
+  .login .login-form {
+    padding: 26px 22px;
+  }
+  .login .login-form h2 {
+    font-size: 24px;
+  }
+}
+.modal::backdrop {
+  background: #05091499;
+}
+.modal:has(.accent-presets) {
+  width: 640px;
+}
+@media (min-width: 761px) {
+  .app.workspace-collapsed .sidebar nav button {
+    min-height: 40px;
+    padding: 9px 0;
+  }
+  .app.workspace-collapsed .sidebar .theme {
+    padding: 10px 0;
+  }
+}
+@media (max-width: 600px) {
+  .accent-presets {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media print {
+  :root {
+    --bg: #ffffff !important;
+    --surface: #ffffff !important;
+    --ink: #111111 !important;
+    --muted: #444444 !important;
+    --border: #dddddd !important;
+    --elevated: #ffffff !important;
+    --soft: #ffffff !important;
+    --accent-text: #111111 !important;
+    color-scheme: light !important;
+  }
+  html,
+  body,
+  .app,
+  .app main {
+    background: #ffffff !important;
+    color: #111111 !important;
+  }
+  .print-scope,
+  .print-scope * {
+    color: #111111 !important;
+  }
+}
+.pending-credit-summary {
+  display: grid;
+  gap: 8px;
+}
+.pending-credit-summary p {
+  margin: 0;
+}

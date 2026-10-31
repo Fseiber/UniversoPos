@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createHash } from "node:crypto";
 import { audit, db, D, ensure, type Tx, transaction } from "./db.js";
+import { stockSettings } from "./stock-mode.js";
 
 export const money = z.coerce
   .number()
@@ -30,11 +31,18 @@ export const methods = z.enum([
   "CUENTA_CORRIENTE",
 ]);
 export const saleInput = z.object({
+  expectedStockEnabled: z.boolean().optional(),
   requestKey: z.string().uuid(),
   customerId: id.optional(),
   pendingName: z.string().trim().min(1).max(80).optional(),
   items: z
-    .array(z.object({ productId: id, quantity }))
+    .array(
+      z.object({
+        productId: id,
+        quantity,
+        expectedUnitPrice: money.optional(),
+      }),
+    )
     .max(300)
     .default([]),
   quickAmount: money.default(0),
@@ -106,7 +114,7 @@ async function chargeAccount(
   ensure(customer?.active, "Cliente no disponible");
   const balance = new D(customer.balance).plus(amount);
   ensure(
-    balance.lte(customer.creditLimit),
+    customer.creditUnlimited || balance.lte(customer.creditLimit),
     `El fiado supera el límite de ${customer.name}. Disponible: $${new D(customer.creditLimit).minus(customer.balance).toFixed(2)}`,
   );
   await tx.customer.update({ where: { id: customerId }, data: { balance } });
@@ -135,6 +143,13 @@ export async function createSale(
       );
       return previous;
     }
+    const settings = await stockSettings(tx);
+    ensure(
+      input.expectedStockEnabled === undefined ||
+        input.expectedStockEnabled === settings.stockEnabled,
+      "El modo de stock cambió en otro equipo. Actualizá el mostrador y revisá el cobro",
+      409,
+    );
     const shift = await currentShift(tx);
     ensure(
       input.items.length || input.quickAmount > 0,
@@ -157,11 +172,20 @@ export async function createSale(
         product.unit === "PESO" || qty.isInteger(),
         `${product.name}: ingresá unidades enteras`,
       );
-      ensure(qty.lte(product.stock), `Stock insuficiente: ${product.name}`);
+      if (settings.stockEnabled)
+        ensure(qty.lte(product.stock), `Stock insuficiente: ${product.name}`);
       const rule = product.rules
         .filter((r) => qty.gte(r.minimum))
         .sort((a, b) => new D(b.minimum).comparedTo(a.minimum))[0];
       const price = new D(rule?.unitPrice ?? product.price);
+      const expected = input.items.find(
+        (i) => i.productId === productId,
+      )?.expectedUnitPrice;
+      ensure(
+        expected === undefined || price.eq(expected),
+        `${product.name}: el precio cambió a ${price.toFixed(2)}. Actualizá y revisá el total antes de cobrar`,
+        409,
+      );
       lines.push({
         productId,
         name: product.name,
@@ -198,6 +222,7 @@ export async function createSale(
     const sale = await tx.sale.create({
       data: {
         requestKey: input.requestKey,
+        stockTracked: settings.stockEnabled,
         requestHash,
         employeeId,
         shiftId: shift.id,
@@ -214,7 +239,7 @@ export async function createSale(
         },
       },
     });
-    for (const line of lines)
+    for (const line of settings.stockEnabled ? lines : [])
       await moveStock(
         tx,
         line.productId,
@@ -232,7 +257,7 @@ export async function createSale(
       employeeId,
       pending ? "VENTA_PENDIENTE" : "VENTA",
       `venta:${sale.id}`,
-      { total: total.toFixed(2) },
+      { total: total.toFixed(2), stockTracked: settings.stockEnabled },
     );
     return tx.sale.findUniqueOrThrow({
       where: { id: sale.id },
@@ -290,6 +315,10 @@ export async function voidSale(
       include: { lines: true, payments: true },
     });
     ensure(sale.status !== "ANULADA", "La venta ya está anulada");
+    ensure(
+      (await tx.saleReturn.count({ where: { saleId } })) === 0,
+      "La venta tiene devoluciones registradas. Devolvé las unidades restantes; no se puede anular completa",
+    );
     const cash = sale.payments
       .filter((p) => p.method === "EFECTIVO")
       .reduce((s, p) => s.plus(p.amount), new D(0));
@@ -299,7 +328,7 @@ export async function voidSale(
         (await expectedCash(tx, shift.id)).gte(cash),
         "No hay suficiente efectivo en caja para el reembolso",
       );
-    for (const line of sale.lines)
+    for (const line of sale.stockTracked ? sale.lines : [])
       await moveStock(
         tx,
         line.productId,

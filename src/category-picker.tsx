@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { usePos } from "./context";
+import { commerceCategories } from "../shared/product-category";
 
 const defaults = [
   "General",
@@ -24,7 +25,12 @@ export function CategoryPicker({
   const { products } = usePos();
   const [selected, setSelected] = useState(defaultValue);
   const categories = [
-    ...new Set([...defaults, ...products.map((p) => p.category), defaultValue]),
+    ...new Set([
+      ...commerceCategories,
+      ...defaults,
+      ...products.map((p) => p.category),
+      defaultValue,
+    ]),
   ];
   return (
     <>

@@ -196,14 +196,14 @@
 }
 @media (min-width: 1000px) {
   .app .pos-layout {
-    height: calc(100dvh - 96px);
-    min-height: 510px;
+    height: calc(100dvh - 184px);
+    min-height: 480px;
     grid-template-columns: minmax(0, 1fr) 370px;
     gap: 20px;
     align-items: stretch;
   }
   .app .pos-layout.needs-shift {
-    height: calc(100dvh - 174px);
+    height: calc(100dvh - 262px);
   }
   .app .product-browser {
     display: flex;
@@ -308,6 +308,38 @@
   }
 }
 @media print {
+  .sync-time {
+    display: none !important;
+  }
+  .sync-status {
+    display: none !important;
+  }
+  .receipt.thermal-58 {
+    width: 52mm !important;
+    max-width: 52mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .receipt.thermal-80 {
+    width: 74mm !important;
+    max-width: 74mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .receipt.thermal-58 pre,
+  .receipt.thermal-80 pre {
+    font-size: 10pt !important;
+    line-height: 1.3;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    color: black;
+    background: white;
+    padding: 0;
+  }
+  .receipt.thermal-58 > :not(pre),
+  .receipt.thermal-80 > :not(pre) {
+    display: none;
+  }
   .app .pos-layout {
     height: auto;
   }
@@ -468,6 +500,276 @@
 }
 .barcode-scanner form > p {
   line-height: 1.6;
+}
+.notes-search {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto 180px auto;
+  gap: 12px;
+}
+.notes-search input,
+.notes-search select {
+  width: 100%;
+  min-width: 0;
+}
+.note-card .note-body {
+  color: var(--ink, #172e25);
+  font-size: 17px;
+}
+.app .notice.success {
+  position: fixed;
+  top: auto;
+  bottom: 22px;
+  right: 22px;
+  left: auto;
+  max-width: min(440px, calc(100vw - 32px));
+  z-index: 1300;
+  box-shadow: 0 6px 24px #0002;
+}
+.history-search {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+}
+.history-search > input {
+  flex: 1;
+  min-width: 200px;
+}
+@media (max-width: 800px) {
+  .notes-search {
+    grid-template-columns: 1fr auto;
+  }
+  .notes-search select {
+    grid-column: 1;
+  }
+  .app .notice.success {
+    bottom: 12px;
+    right: 12px;
+  }
+}
+.notes-search input {
+  flex: 1;
+  min-width: 0;
+}
+.notes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 16px;
+  padding: 20px;
+}
+.note-card {
+  border: 1px solid var(--border, #d5ddd8);
+  border-radius: 12px;
+  padding: 18px;
+  min-width: 0;
+}
+.note-card .panel-toolbar {
+  padding: 0;
+  align-items: start;
+  gap: 10px;
+}
+.note-card h2 {
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+.note-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+  margin: 16px 0;
+}
+.note-card small {
+  display: block;
+  margin: 8px 0;
+}
+.note-card .button-row {
+  margin-top: 16px;
+}
+.customer-reminders {
+  max-height: 200px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  margin-bottom: 10px;
+}
+.customer-reminders .notice {
+  display: block;
+}
+.customer-reminders .notice span {
+  display: block;
+  white-space: pre-wrap;
+}
+.customer-reminders p {
+  margin: 6px 0;
+}
+.customer-reminders summary {
+  cursor: pointer;
+}
+.sidebar nav {
+  overflow-y: auto;
+  min-height: 0;
+  flex-shrink: 1;
+}
+.sidebar-bottom {
+  flex-shrink: 0;
+}
+.workspace-toggle {
+  display: inline-flex;
+  margin-left: 12px;
+}
+@media (min-width: 761px) {
+  .app.workspace-collapsed .sidebar {
+    width: 76px;
+    padding: 24px 8px 0;
+    transform: none;
+  }
+  .app.workspace-collapsed main {
+    margin-left: 76px;
+  }
+  .app.workspace-collapsed .progress {
+    left: 76px;
+  }
+  .app.workspace-collapsed .sidebar .brand {
+    justify-content: center;
+    margin-bottom: 28px;
+  }
+  .app.workspace-collapsed .sidebar .brand > span,
+  .app.workspace-collapsed .nav-label,
+  .app.workspace-collapsed .nav-item-label,
+  .app.workspace-collapsed .nav-dot,
+  .app.workspace-collapsed .local-status,
+  .app.workspace-collapsed .sync-time,
+  .app.workspace-collapsed .sidebar-theme-label,
+  .app.workspace-collapsed .sidebar .user > div {
+    display: none;
+  }
+  .app.workspace-collapsed .sidebar nav button {
+    justify-content: center;
+    padding: 13px 0;
+    min-height: 46px;
+  }
+  .app.workspace-collapsed .sidebar nav .badge {
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    font-size: 10px;
+    padding: 1px 4px;
+  }
+  .app.workspace-collapsed .sidebar .theme,
+  .app.workspace-collapsed .sidebar .user {
+    justify-content: center;
+    padding: 16px 0;
+  }
+}
+.product-category-heading th {
+  font-size: 16px;
+  padding: 14px 18px;
+}
+.product-category-heading small {
+  margin-left: 12px;
+  color: inherit;
+  font-weight: 400;
+}
+.products-toolbar {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.products-toolbar .field {
+  margin: 0;
+  min-width: 180px;
+}
+.app .category-illustration > span {
+  z-index: 2;
+  opacity: 1;
+  font-weight: 600;
+}
+.header-info {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.app .stock-mode-button,
+.app .pending-sales-button {
+  padding: 8px 12px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.stock-mode-button.enabled {
+  background: var(--soft);
+  color: var(--ink);
+}
+.stock-mode-button.disabled {
+  background: #fff0cf;
+  color: #795719;
+}
+.app .category-illustration {
+  background: var(--soft);
+}
+.app .category-art {
+  width: 150px;
+  height: 112px;
+}
+.category-art svg {
+  overflow: visible;
+}
+.sort-button {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+}
+.audit-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.audit-filters .field {
+  flex: 1;
+  min-width: 140px;
+  margin: 0;
+}
+.audit-filters > input {
+  flex: 2;
+  min-width: 240px;
+}
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0;
+}
+.app .checkbox-row input {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+@media (max-width: 760px) {
+  .workspace-toggle {
+    display: none;
+  }
+  .app.workspace-collapsed.menu-open .sidebar {
+    transform: translateX(0);
+  }
+  .topbar {
+    height: auto;
+    min-height: 62px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  .header-info {
+    gap: 5px;
+  }
+  .app .stock-mode-button,
+  .app .pending-sales-button {
+    font-size: 12px;
+    padding: 6px;
+  }
 }
 @media (max-width: 900px) {
   .barcode-workspace {

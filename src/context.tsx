@@ -5,6 +5,7 @@ export type Context = {
   products: Product[];
   customers: Customer[];
   shift: Shift | null;
+  stockSettings: { stockEnabled: boolean; version: number };
   refresh: () => Promise<void>;
   task: (fn: () => Promise<void>) => Promise<void>;
   notify: (text: string) => void;

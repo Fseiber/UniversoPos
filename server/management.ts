@@ -1,4 +1,7 @@
 import { Router } from "express";
+import { auditList } from "./audit-list.js";
+import { commercialReport } from "./commercial-report.js";
+import { authorizeException } from "./employee-policy.js";
 import { z } from "zod";
 import { admin } from "./auth.js";
 import { audit, db, D, ensure, transaction } from "./db.js";
@@ -10,7 +13,14 @@ import {
   quantity,
   reconcile,
 } from "./services.js";
-import { backupDirectory, backupState, createBackup } from "./backups.js";
+import {
+  backupDirectory,
+  backupState,
+  createBackup,
+  externalBackupDirectory,
+  offsiteDirectory,
+  configureOffsite,
+} from "./backups.js";
 import { buildReportPdf } from "./pdf.js";
 
 export const management = Router();
@@ -23,6 +33,12 @@ management.post("/withdrawals", async (req, res) => {
       mode: z.enum(["RECARGO", "DESCUENTO"]),
     })
     .parse(req.body);
+  await authorizeException(
+    res.locals.employee,
+    "movement",
+    data.amount,
+    req.body.approval,
+  );
   const result = await transaction(async (tx) => {
     const shift = await currentShift(tx);
     const cashAmount =
@@ -72,6 +88,27 @@ management.post("/withdrawals", async (req, res) => {
   res.status(201).json(result);
 });
 management.use(admin);
+management.use("/audit", auditList);
+management.get("/recovery", async (_req, res) =>
+  res.json({ offsiteDirectory: await offsiteDirectory() }),
+);
+management.put("/recovery/offsite", async (req, res) => {
+  const { directory } = z
+    .object({
+      directory: z
+        .string()
+        .trim()
+        .min(3)
+        .max(500)
+        .regex(/^[^\r\n\0]+$/),
+    })
+    .parse(req.body);
+  const target = await configureOffsite(directory);
+  await audit(db, res.locals.employee.id, "CARPETA_RESPALDO", "configuracion", {
+    directory: target,
+  });
+  res.json({ directory: target });
+});
 management.post("/products/:id/rules", async (req, res) => {
   const productId = id.parse(req.params.id);
   const data = z
@@ -280,16 +317,61 @@ export async function report(from: string, to: string) {
         .plus(p.amount)
         .toFixed(2);
     const debtCollections = await tx.accountMovement.findMany({
-      where: { createdAt: { gte: start, lt: end }, kind: "PAGO_EFECTIVO" },
+      // Los reintegros de devoluciones se contabilizan aparte de los pagos originales.
+      where: {
+        createdAt: { gte: start, lt: end },
+        kind: { startsWith: "PAGO_" },
+      },
     });
+    const returns = await tx.saleReturn.findMany({
+      where: { createdAt: { gte: start, lt: end } },
+    });
+    for (const r of returns) {
+      total = total.minus(r.amount);
+      byMethod[r.method] = new D(byMethod[r.method] ?? 0)
+        .minus(r.amount)
+        .toFixed(2);
+      const day = new Date(r.createdAt.getTime() - 3 * 3600000)
+        .toISOString()
+        .slice(0, 10);
+      daily.set(day, (daily.get(day) ?? new D(0)).minus(r.amount));
+      for (const row of JSON.parse(r.lineDetails)) {
+        if (row.unitCost === null) {
+          unknownProductCost = unknownProductCost.minus(row.baseAmount);
+          margin = margin.minus(new D(row.amount).minus(row.baseAmount));
+        } else
+          margin = margin
+            .minus(row.amount)
+            .plus(r.restock ? new D(row.unitCost).mul(row.quantity) : 0);
+        const p = top.get(row.productId) ?? {
+          name: row.name,
+          quantity: new D(0),
+          amount: new D(0),
+        };
+        p.quantity = p.quantity.minus(row.quantity);
+        p.amount = p.amount.minus(row.baseAmount);
+        top.set(row.productId, p);
+      }
+    }
     return {
+      ...(await commercialReport(tx, start, end, sales, returns, products)),
       from,
       to,
       salesCount: sales.length,
+      returnsCount: returns.length,
+      returnedAmount: returns.reduce((s, r) => s.plus(r.amount), new D(0)),
       total,
       margin: margin.toDecimalPlaces(2),
       quick,
       unknownCostRevenue: unknownProductCost.plus(quick),
+      hasUnknownCosts:
+        sales.some(
+          (s) =>
+            s.quickAmount.gt(0) || s.lines.some((l) => l.unitCost === null),
+        ) ||
+        returns.some((r) =>
+          JSON.parse(r.lineDetails).some((row: any) => row.unitCost === null),
+        ),
       pending,
       byMethod,
       debtCollections: debtCollections.reduce(
@@ -310,7 +392,7 @@ export async function report(from: string, to: string) {
         (s, w) => s.plus(w.commission),
         new D(0),
       ),
-      note: "Ventas por fecha de creación; anulaciones excluidas. Cobros por fecha de pago. Fiados son deuda, no efectivo. El margen usa solo líneas con costo de compra conocido y recargos; excluye ventas rápidas, productos sin costo y gastos. Cargar un costo después no modifica el costo histórico de ventas anteriores. Saldos y stock son actuales.",
+      note: "Ventas por fecha de creación; anulaciones excluidas. Las devoluciones se descuentan por fecha de reintegro, incluso si corresponden a una venta anterior al período. Cobros por fecha de pago. Fiados son deuda, no efectivo. El margen usa costos históricos conocidos y recargos; no es ganancia neta después de gastos. Los productos no recuperables conservan su costo como pérdida. Cargar un costo después no modifica ventas anteriores. Saldos y stock son actuales.",
     };
   });
 }
@@ -328,28 +410,14 @@ management.get("/reports.pdf", async (req, res) => {
   );
   res.send(pdf);
 });
-management.get("/audit", async (req, res) => {
-  const data = z
-    .object({ q: z.string().max(100).default(""), before: id.optional() })
-    .parse(req.query);
-  res.json(
-    await db.audit.findMany({
-      where: {
-        ...(data.before ? { id: { lt: data.before } } : {}),
-        OR: [
-          { action: { contains: data.q } },
-          { entity: { contains: data.q } },
-          { detail: { contains: data.q } },
-        ],
-      },
-      orderBy: { id: "desc" },
-      take: 100,
-    }),
-  );
-});
 management.get("/reconcile", async (_req, res) => res.json(await reconcile()));
 management.get("/backups", async (_req, res) =>
-  res.json({ ...backupState, directory: backupDirectory(), retentionDays: 15 }),
+  res.json({
+    ...backupState,
+    directory: backupDirectory(),
+    externalDirectory: externalBackupDirectory(),
+    retentionDays: 15,
+  }),
 );
 management.post("/backups", async (_req, res) => {
   const file = await createBackup();

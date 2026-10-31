@@ -3,6 +3,8 @@ import path from "node:path";
 import { prepareDemoDatabase } from "./demo-database.js";
 process.env.DATABASE_URL = await prepareDemoDatabase();
 process.env.BACKUP_DIR = path.resolve(".demo/backups");
+process.env.BACKUP_SECONDARY_DIR = "";
+process.env.BACKUP_OFFSITE_DIR = "";
 process.env.PORT = "3002";
 process.env.HOST = "127.0.0.1";
 process.env.DEMO_MODE = "true";

@@ -1,4 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
+import { AppearancePicker } from "./appearance-picker";
+import { applyAppearance, normalizeAccent } from "./appearance";
+import { StockModeButton } from "./stock-mode-button";
 import { createRoot } from "react-dom/client";
 import {
   ShoppingBasket,
@@ -16,6 +19,8 @@ import {
   Check,
   AlertCircle,
   Menu,
+  NotebookPen,
+  Palette,
 } from "lucide-react";
 import {
   api,
@@ -27,11 +32,13 @@ import {
 import { PosContext } from "./context";
 import { Field } from "./components";
 import { Sell } from "./sell";
+import { Notes } from "./notes";
 import { Products, Customers, Cash } from "./operations";
 import { Catalog, Reports, Sales, Admin } from "./management";
 import "./style.css";
 import "./compact.css";
 import "./readability.css";
+import "./theme.css";
 
 const navigation = [
   ["venta", "Punto de venta", ShoppingBasket],
@@ -39,6 +46,7 @@ const navigation = [
   ["clientes", "Clientes y fiados", Users],
   ["caja", "Caja y turnos", Wallet],
   ["ventas", "Historial de ventas", ShoppingBasket],
+  ["notas", "Notas", NotebookPen],
   ["catalogo", "Proveedores y faltantes", Truck],
   ["reportes", "Resumen del negocio", ChartNoAxesCombined],
   ["auditoria", "Auditoría", ShieldCheck],
@@ -46,6 +54,11 @@ const navigation = [
 ] as const;
 
 function App() {
+  const [noteCount, setNoteCount] = useState(0);
+  const [stockSettings, setStockSettings] = useState({
+    stockEnabled: true,
+    version: 0,
+  });
   const [bootstrap, setBootstrap] = useState<{
     needsSetup: boolean;
     employees: Employee[];
@@ -66,19 +79,40 @@ function App() {
     ),
     [menu, setMenu] = useState(false);
   const lock = useRef(false);
+  const [accent, setAccent] = useState(() =>
+    normalizeAccent(localStorage.getItem("universo-accent")),
+  );
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => localStorage.getItem("universo-sidebar-collapsed") === "true",
+  );
+  const [pendingToday, setPendingToday] = useState(0);
+  const [pendingView, setPendingView] = useState(false);
+  const refreshSequence = useRef(0);
   useEffect(() => {
-    document.documentElement.dataset.theme = dark ? "dark" : "light";
+    applyAppearance(document.documentElement, accent, dark);
     localStorage.setItem("universo-theme", dark ? "dark" : "light");
-  }, [dark]);
+    localStorage.setItem("universo-accent", accent);
+  }, [dark, accent]);
+  const [connection, setConnection] = useState("Conectando…");
+  const [lastSync, setLastSync] = useState("");
   async function refresh() {
-    const [p, c, s] = await Promise.all([
+    const sequence = ++refreshSequence.current;
+    const [p, c, s, settings, pending] = await Promise.all([
       api<Product[]>("/products"),
       api<Customer[]>("/customers"),
       api<Shift | null>("/shift"),
+      api<{ stockEnabled: boolean; version: number }>("/settings/stock"),
+      api<{ today: number }>("/sales/pending-summary"),
     ]);
+    if (sequence !== refreshSequence.current) return;
     setProducts(p);
     setCustomers(c);
     setShift(s);
+    setStockSettings(settings);
+    setPendingToday(pending.today);
+    setConnection("Conectado");
+    setLastSync(new Date().toLocaleTimeString("es-AR"));
     setVersion((v) => v + 1);
   }
   async function task(fn: () => Promise<void>) {
@@ -90,6 +124,8 @@ function App() {
       await fn();
     } catch (e) {
       setError((e as Error).message);
+      if ((e as { code?: string }).code === "SESSION_EXPIRED")
+        setEmployee(null);
     } finally {
       lock.current = false;
       setBusy(false);
@@ -114,6 +150,31 @@ function App() {
     if (employee) void task(refresh);
   }, [employee]);
   useEffect(() => {
+    if (!employee) return;
+    const sync = () => {
+      if (lock.current || document.hidden) return;
+      void refresh().catch((e) => {
+        setConnection(
+          "Sin conexión o sesión vencida. No confirmes cobros nuevos",
+        );
+        if (e.code === "SESSION_EXPIRED") setEmployee(null);
+      });
+      void api<{ open: number }>("/notes/summary")
+        .then((r) => setNoteCount(r.open))
+        .catch(() => {});
+      void api<{ stockEnabled: boolean; version: number }>("/settings/stock")
+        .then(setStockSettings)
+        .catch(() => {});
+    };
+    const timer = setInterval(sync, 10000);
+    sync();
+    window.addEventListener("focus", sync);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", sync);
+    };
+  }, [employee]);
+  useEffect(() => {
     if (message) {
       const timer = setTimeout(() => setMessage(""), 6500);
       return () => clearTimeout(timer);
@@ -128,34 +189,18 @@ function App() {
     );
   if (!employee)
     return (
-      <div className="login">
-        <div className="login-story">
-          <div className="brand">
-            <Orbit size={36} />
-            <span>
-              EL UNIVERSO<small>PUNTO DE VENTA</small>
+      <main className="login">
+        <section className="login-form" aria-labelledby="login-title">
+          <div className="login-brand">
+            <span className="login-mark">
+              <Orbit size={32} />
             </span>
+            <div>
+              <strong>El Universo</strong>
+              <small>Punto de venta</small>
+            </div>
           </div>
-          <div>
-            <span className="eyebrow">TU COMERCIO, EN ORDEN</span>
-            <h1>
-              Todo lo que pasa
-              <br />
-              en tu mostrador.
-              <br />
-              <em>En un solo lugar.</em>
-            </h1>
-            <p>
-              Ventas, caja, stock y fiados.
-              <br />
-              La tranquilidad de tener las cuentas claras.
-            </p>
-          </div>
-          <small>Sistema local · El Universo POS</small>
-        </div>
-        <div className="login-form">
-          <span className="eyebrow">BIENVENIDO A EL UNIVERSO</span>
-          <h2>
+          <h2 id="login-title">
             {bootstrap?.needsSetup
               ? "Empecemos por tu acceso"
               : "Tu turno comienza acá"}
@@ -209,7 +254,7 @@ function App() {
                 />
               </Field>
             ) : (
-              <Field label="Empleado">
+              <Field label="Usuario">
                 <select name="employeeId" required>
                   {bootstrap?.employees.map((e) => (
                     <option key={e.id} value={e.id}>
@@ -244,9 +289,13 @@ function App() {
               <span>→</span>
             </button>
           </form>
-          <small>Los datos se guardan en esta computadora.</small>
-        </div>
-      </div>
+          <small>
+            {bootstrap?.demo
+              ? "Demostración · Datos ficticios"
+              : "Acceso con PIN · El Universo POS"}
+          </small>
+        </section>
+      </main>
     );
   const admin = employee.role === "ADMIN";
   return (
@@ -256,6 +305,7 @@ function App() {
         products,
         customers,
         shift,
+        stockSettings,
         refresh,
         task,
         notify,
@@ -265,7 +315,9 @@ function App() {
         clearError: () => setError(""),
       }}
     >
-      <div className={`app ${menu ? "menu-open" : ""}`}>
+      <div
+        className={`app ${menu ? "menu-open" : ""} ${sidebarCollapsed ? "workspace-collapsed" : ""}`}
+      >
         <aside className="sidebar">
           <div className="brand">
             <Orbit size={31} />
@@ -289,25 +341,52 @@ function App() {
               .map(([key, label, Icon]) => (
                 <button
                   key={key}
+                  aria-label={label}
+                  title={label}
                   className={page === key ? "active" : ""}
                   onClick={() => {
                     setPage(key);
+                    setPendingView(false);
                     setMenu(false);
                   }}
                 >
                   <Icon size={19} />
-                  {label}
+                  <span className="nav-item-label">{label}</span>
+                  {key === "notas" && noteCount > 0 && (
+                    <span className="badge amber">{noteCount}</span>
+                  )}
                   {page === key && <span className="nav-dot" />}
                 </button>
               ))}
           </nav>
           <div className="sidebar-bottom">
-            <div className="local-status">
-              <i /> Sistema local operativo
+            <div className="local-status sync-status" role="status">
+              <i /> {connection}
             </div>
-            <button className="theme" onClick={() => setDark(!dark)}>
-              {dark ? <Sun size={17} /> : <Moon size={17} />} Tema{" "}
-              {dark ? "claro" : "oscuro"}
+            {lastSync && (
+              <small className="sync-time">Datos actualizados {lastSync}</small>
+            )}
+            <button
+              className="theme"
+              aria-label={
+                dark ? "Cambiar a tema claro" : "Cambiar a tema oscuro"
+              }
+              title={dark ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}
+              onClick={() => setDark(!dark)}
+            >
+              {dark ? <Sun size={17} /> : <Moon size={17} />}{" "}
+              <span className="sidebar-theme-label">
+                Tema {dark ? "claro" : "oscuro"}
+              </span>
+            </button>
+            <button
+              className="theme"
+              aria-label="Elegir color principal"
+              title="Elegir color principal"
+              onClick={() => setAppearanceOpen(true)}
+            >
+              <Palette size={17} />
+              <span className="sidebar-theme-label">Color principal</span>
             </button>
             <div className="user">
               <div className="avatar">
@@ -348,6 +427,29 @@ function App() {
                 <span>/</span>{" "}
                 <strong>{navigation.find((n) => n[0] === page)?.[1]}</strong>
               </span>
+              <button
+                className="workspace-toggle icon-button"
+                aria-label={
+                  sidebarCollapsed
+                    ? "Ampliar espacio de trabajo"
+                    : "Reducir a íconos"
+                }
+                aria-expanded={!sidebarCollapsed}
+                title={
+                  sidebarCollapsed
+                    ? "Ampliar espacio de trabajo"
+                    : "Reducir a íconos"
+                }
+                onClick={() => {
+                  setSidebarCollapsed(!sidebarCollapsed);
+                  localStorage.setItem(
+                    "universo-sidebar-collapsed",
+                    String(!sidebarCollapsed),
+                  );
+                }}
+              >
+                <Menu size={22} />
+              </button>
             </div>
             <div className="header-info">
               <span>
@@ -356,6 +458,20 @@ function App() {
                   month: "long",
                 })}
               </span>
+              {page === "venta" && (
+                <>
+                  <StockModeButton />
+                  <button
+                    className="pending-sales-button"
+                    onClick={() => {
+                      setPendingView(true);
+                      setPage("ventas");
+                    }}
+                  >
+                    Pendientes de hoy ({pendingToday})
+                  </button>
+                </>
+              )}
               <span className={`badge ${shift ? "green" : "amber"}`}>
                 <i />
                 {shift ? `Caja #${shift.id} abierta` : "Caja cerrada"}
@@ -388,7 +504,8 @@ function App() {
             {page === "productos" && <Products />}
             {page === "clientes" && <Customers />}
             {page === "caja" && <Cash />}
-            {page === "ventas" && <Sales />}
+            {page === "ventas" && <Sales initialPendingToday={pendingView} />}
+            {page === "notas" && <Notes />}
             {page === "catalogo" && <Catalog />}
             {page === "reportes" && <Reports />}
             {(page === "auditoria" || page === "configuracion") && (
@@ -397,6 +514,15 @@ function App() {
           </div>
         </main>
       </div>
+      {appearanceOpen && (
+        <AppearancePicker
+          color={accent}
+          dark={dark}
+          onColor={setAccent}
+          onDark={setDark}
+          onClose={() => setAppearanceOpen(false)}
+        />
+      )}
     </PosContext.Provider>
   );
 }
@@ -420,6 +546,11 @@ class ErrorBoundary extends React.Component<
     );
   }
 }
+applyAppearance(
+  document.documentElement,
+  normalizeAccent(localStorage.getItem("universo-accent")),
+  localStorage.getItem("universo-theme") === "dark",
+);
 createRoot(document.getElementById("root")!).render(
   <ErrorBoundary>
     <App />

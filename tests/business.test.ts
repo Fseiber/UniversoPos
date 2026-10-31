@@ -72,6 +72,10 @@ await test("F0 · configuración, sesión, roles y PIN hasheado", async () => {
     .send({ name: "Mostrador", pin: "667788", role: "EMPLEADO" })
     .expect(201);
   employeeId = employee.body.id;
+  await admin
+    .put("/api/settings/employees")
+    .send({ employeeSurchargeLimit: 100, employeeMovementLimit: 100000 })
+    .expect(200);
   const record = await db.employee.findUniqueOrThrow({
     where: { id: employeeId },
   });
@@ -159,7 +163,7 @@ await test("F0 · venta de contado atómica e idempotencia", async () => {
     18,
   );
   assert.equal(await db.stockMovement.count({ where: { saleId } }), 1);
-  assert.equal(Number((await worker.get("/api/shift")).body.expected), 700);
+  assert.equal(Number((await admin.get("/api/shift")).body.expected), 700);
   await worker
     .post("/api/sales")
     .send({
@@ -225,7 +229,7 @@ await test("F0 · fiar, cobrar deuda y arqueo correcto", async () => {
       ),
     )
     .expect(201);
-  assert.equal(Number((await worker.get("/api/shift")).body.expected), 700);
+  assert.equal(Number((await admin.get("/api/shift")).body.expected), 700);
   await worker
     .post(`/api/customers/${customerId}/payments`)
     .send({ amount: 50 })
@@ -241,7 +245,7 @@ await test("F0 · fiar, cobrar deuda y arqueo correcto", async () => {
     ),
     150,
   );
-  assert.equal(Number((await worker.get("/api/shift")).body.expected), 750);
+  assert.equal(Number((await admin.get("/api/shift")).body.expected), 750);
 });
 await test("F0 · validaciones de crédito, referencias y montos", async () => {
   await worker
@@ -347,7 +351,7 @@ await test("F1 · pagos mixtos, venta rápida y recargos", async () => {
     )
     .expect(201);
   assert.equal(Number(p.body.total), 112);
-  assert.equal(Number((await worker.get("/api/shift")).body.expected), 800);
+  assert.equal(Number((await admin.get("/api/shift")).body.expected), 800);
   assert.equal(
     Number(
       (await db.product.findUniqueOrThrow({ where: { id: productId } })).stock,
@@ -372,7 +376,7 @@ await test("F1 · pagos mixtos, venta rápida y recargos", async () => {
     .send({ amount: 100, percent: 17, mode: "DESCUENTO", method: "DEBITO" })
     .expect(201);
   assert.equal(Number(w2.body.cashAmount), 83);
-  assert.equal(Number((await worker.get("/api/shift")).body.expected), 597);
+  assert.equal(Number((await admin.get("/api/shift")).body.expected), 597);
 });
 await test("F2 · granel, redondeo y precedencia de precios escalonados", async () => {
   const p = await admin
@@ -456,14 +460,14 @@ await test("F2 · proveedores, ofertas y faltantes", async () => {
   assert.equal((await admin.get("/api/shortages")).body.notes[0].done, true);
 });
 await test("F3 · pendiente entrega stock sin cobrar y salda una sola vez", async () => {
-  const beforeCash = Number((await worker.get("/api/shift")).body.expected);
+  const beforeCash = Number((await admin.get("/api/shift")).body.expected);
   const sale = await worker
     .post("/api/sales")
     .send(order([{ productId, quantity: 1 }], [], { pendingName: "Valentina" }))
     .expect(201);
   pendingId = sale.body.id;
   assert.equal(
-    Number((await worker.get("/api/shift")).body.expected),
+    Number((await admin.get("/api/shift")).body.expected),
     beforeCash,
   );
   const stockBefore = Number(
@@ -484,12 +488,12 @@ await test("F3 · pendiente entrega stock sin cobrar y salda una sola vez", asyn
     stockBefore,
   );
   assert.equal(
-    Number((await worker.get("/api/shift")).body.expected),
+    Number((await admin.get("/api/shift")).body.expected),
     beforeCash + 100,
   );
 });
 await test("F3 · anulación requiere PIN ADMIN y revierte caja/stock sin duplicar", async () => {
-  const beforeCash = Number((await worker.get("/api/shift")).body.expected);
+  const beforeCash = Number((await admin.get("/api/shift")).body.expected);
   const beforeStock = Number(
     (await db.product.findUniqueOrThrow({ where: { id: productId } })).stock,
   );
@@ -506,7 +510,7 @@ await test("F3 · anulación requiere PIN ADMIN y revierte caja/stock sin duplic
     .send({ adminId, pin: "825194", reason: "Prueba de anulación" })
     .expect(400);
   assert.equal(
-    Number((await worker.get("/api/shift")).body.expected),
+    Number((await admin.get("/api/shift")).body.expected),
     beforeCash - 200,
   );
   assert.equal(
@@ -793,7 +797,7 @@ await test("Productos · precio de venta sin costo de compra y margen sin gananc
       ),
     )
     .expect(201);
-  assert.equal(sale.body.lines[0].unitCost, null);
+  assert.ok(!("unitCost" in sale.body.lines[0]));
   const after = await report(reportFrom, reportTo);
   assert.equal(after.margin.toString(), before.margin.toString());
   assert.equal(
@@ -807,7 +811,15 @@ await test("Productos · precio de venta sin costo de compra y margen sin gananc
     price: 25,
     cost: 10,
   };
-  await admin.put(`/api/products/${p.body.id}`).send(input).expect(200);
+  await admin
+    .put(`/api/products/${p.body.id}`)
+    .send({
+      ...input,
+      version: (
+        await db.product.findUniqueOrThrow({ where: { id: p.body.id } })
+      ).version,
+    })
+    .expect(200);
   assert.equal(
     (await report(reportFrom, reportTo)).margin.toString(),
     before.margin.toString(),
@@ -821,7 +833,14 @@ await test("Productos · precio de venta sin costo de compra y margen sin gananc
       ),
     )
     .expect(201);
-  assert.equal(Number(later.body.lines[0].unitCost), 10);
+  assert.ok(!("unitCost" in later.body.lines[0]));
+  assert.equal(
+    Number(
+      (await db.saleLine.findFirstOrThrow({ where: { saleId: later.body.id } }))
+        .unitCost,
+    ),
+    10,
+  );
   assert.equal(
     Number((await report(reportFrom, reportTo)).margin),
     Number(before.margin) + 15,
@@ -1065,14 +1084,12 @@ await test("PostgreSQL · ventas simultáneas conservan stock, fiado e idempoten
     .expect(201);
   const credit = await Promise.all(
     [1, 2].map(() =>
-      worker
-        .post("/api/sales")
-        .send(
-          order([], [{ method: "CUENTA_CORRIENTE", amount: 75 }], {
-            quickAmount: 75,
-            customerId: customer.body.id,
-          }),
-        ),
+      worker.post("/api/sales").send(
+        order([], [{ method: "CUENTA_CORRIENTE", amount: 75 }], {
+          quickAmount: 75,
+          customerId: customer.body.id,
+        }),
+      ),
     ),
   );
   assert.deepEqual(credit.map((r) => r.status).sort(), [201, 400].sort());
@@ -1150,7 +1167,7 @@ await test("F5 · cambio de PIN revoca sesiones anteriores", async () => {
 await test("F5 · reconciliación, respaldo consistente, cierre y persistencia", async () => {
   const reconciled = await admin.get("/api/reconcile").expect(200);
   assert.equal(reconciled.body.ok, true);
-  const cash = (await worker.get("/api/shift")).body.expected;
+  const cash = (await admin.get("/api/shift")).body.expected;
   const closed = await worker
     .post("/api/shifts/close")
     .send({ declared: cash })

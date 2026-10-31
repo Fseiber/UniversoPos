@@ -8,6 +8,7 @@ datasource db {
 }
 
 model Employee {
+  notes       Note[]
   id          Int       @id @default(autoincrement())
   name        String
   pinHash     String
@@ -21,6 +22,29 @@ model Employee {
   createdAt   DateTime  @default(now())
 }
 
+model Note {
+  productId  Int?
+  product    Product?  @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  supplierId Int?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  customerId Int?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  dueAt      DateTime?
+  id         Int       @id @default(autoincrement())
+  title      String
+  body       String
+  resolved   Boolean   @default(false)
+  version    Int       @default(0)
+  authorId   Int
+  author     Employee  @relation(fields: [authorId], references: [id])
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([createdAt])
+  @@index([customerId, resolved])
+  @@index([productId, resolved])
+}
+
 model Session {
   id         String   @id
   employeeId Int
@@ -29,6 +53,10 @@ model Session {
 }
 
 model Product {
+  purchaseLines PurchaseLine[]
+  lots ProductLot[]
+  version    Int              @default(0)
+  notes      Note[]
   id         Int              @id @default(autoincrement())
   name       String
   barcode    String?          @unique
@@ -48,12 +76,15 @@ model Product {
 }
 
 model Customer {
-  id          Int               @id @default(autoincrement())
+  creditUnlimited Boolean @default(false)
+  notes       Note[]
+  containers  ContainerMovement[]
+  id          Int                 @id @default(autoincrement())
   name        String
-  phone       String            @default("")
-  creditLimit Decimal           @default(0) @db.Decimal(18, 2)
-  balance     Decimal           @default(0) @db.Decimal(18, 2)
-  active      Boolean           @default(true)
+  phone       String              @default("")
+  creditLimit Decimal             @default(0) @db.Decimal(18, 2)
+  balance     Decimal             @default(0) @db.Decimal(18, 2)
+  active      Boolean             @default(true)
   movements   AccountMovement[]
   sales       Sale[]
 }
@@ -74,26 +105,59 @@ model Shift {
 }
 
 model Sale {
-  id          Int        @id @default(autoincrement())
-  requestKey  String     @unique
-  requestHash String     @default("")
+  returns      SaleReturn[]
+  stockTracked Boolean      @default(true)
+  id           Int          @id @default(autoincrement())
+  requestKey   String       @unique
+  requestHash  String       @default("")
+  employeeId   Int
+  employee     Employee     @relation(fields: [employeeId], references: [id])
+  shiftId      Int
+  shift        Shift        @relation(fields: [shiftId], references: [id])
+  customerId   Int?
+  customer     Customer?    @relation(fields: [customerId], references: [id])
+  pendingName  String?
+  status       String       @default("COMPLETADA")
+  subtotal     Decimal      @db.Decimal(18, 2)
+  surcharge    Decimal      @default(0) @db.Decimal(18, 2)
+  total        Decimal      @db.Decimal(18, 2)
+  quickAmount  Decimal      @default(0) @db.Decimal(18, 2)
+  createdAt    DateTime     @default(now())
+  voidedAt     DateTime?
+  voidReason   String?
+  lines        SaleLine[]
+  payments     Payment[]
+
+  @@index([createdAt])
+  @@index([employeeId])
+  @@index([customerId])
+  @@index([status, id])
+}
+
+model SaleReturn {
+  requestHash String
+  id          Int      @id @default(autoincrement())
+  requestKey  String   @unique
+  saleId      Int
+  sale        Sale     @relation(fields: [saleId], references: [id])
+  amount      Decimal  @db.Decimal(18, 2)
+  method      String
+  restock     Boolean
+  reason      String
   employeeId  Int
-  employee    Employee   @relation(fields: [employeeId], references: [id])
-  shiftId     Int
-  shift       Shift      @relation(fields: [shiftId], references: [id])
-  customerId  Int?
-  customer    Customer?  @relation(fields: [customerId], references: [id])
-  pendingName String?
-  status      String     @default("COMPLETADA")
-  subtotal    Decimal    @db.Decimal(18, 2)
-  surcharge   Decimal    @default(0) @db.Decimal(18, 2)
-  total       Decimal    @db.Decimal(18, 2)
-  quickAmount Decimal    @default(0) @db.Decimal(18, 2)
-  createdAt   DateTime   @default(now())
-  voidedAt    DateTime?
-  voidReason  String?
-  lines       SaleLine[]
-  payments    Payment[]
+  adminId     Int
+  lineDetails String
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model PosSettings {
+  employeeSurchargeLimit Decimal @default(0) @db.Decimal(18, 2)
+  employeeMovementLimit Decimal @default(0) @db.Decimal(18, 2)
+  id           Int     @id @default(1)
+  stockEnabled Boolean @default(true)
+  version      Int     @default(0)
 }
 
 model SaleLine {
@@ -131,6 +195,10 @@ model StockMovement {
 }
 
 model AccountMovement {
+  requestKey String? @unique
+  requestHash String?
+  method String @default("EFECTIVO")
+  reference String @default("")
   id         Int      @id @default(autoincrement())
   customerId Int
   customer   Customer @relation(fields: [customerId], references: [id])
@@ -144,6 +212,7 @@ model AccountMovement {
 }
 
 model CashMovement {
+  category String @default("SIN_CLASIFICAR")
   id         Int      @id @default(autoincrement())
   shiftId    Int
   shift      Shift    @relation(fields: [shiftId], references: [id])
@@ -174,6 +243,8 @@ model PriceRule {
 }
 
 model Supplier {
+  purchases Purchase[]
+  notes   Note[]
   id      Int             @id @default(autoincrement())
   name    String
   contact String          @default("")
@@ -244,4 +315,73 @@ model ImportedProduct {
 model BarcodeReservation {
   barcode String @id
   owner   String @unique
+}
+
+model ContainerMovement {
+  id         Int      @id @default(autoincrement())
+  requestKey String   @unique
+  customerId Int
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  kind       String
+  quantity   Int
+  reason     String
+  employeeId Int
+  createdAt  DateTime @default(now())
+
+  @@index([customerId, id])
+}
+
+model Purchase {
+  id Int @id @default(autoincrement())
+  requestKey String @unique
+  requestHash String
+  supplierId Int
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+  document String
+  total Decimal @db.Decimal(18,2)
+  expenses Decimal @db.Decimal(18,2)
+  employeeId Int
+  createdAt DateTime @default(now())
+  lines PurchaseLine[]
+  payments SupplierPayment[]
+  @@index([supplierId, createdAt])
+}
+model PurchaseLine {
+  id Int @id @default(autoincrement())
+  purchaseId Int
+  purchase Purchase @relation(fields: [purchaseId], references: [id])
+  productId Int
+  product Product @relation(fields: [productId], references: [id])
+  name String
+  quantity Decimal @db.Decimal(18,3)
+  unitCost Decimal @db.Decimal(18,2)
+  previousCost Decimal? @db.Decimal(18,2)
+  newCost Decimal @db.Decimal(18,2)
+  total Decimal @db.Decimal(18,2)
+  lot ProductLot?
+}
+model ProductLot {
+  id Int @id @default(autoincrement())
+  productId Int
+  product Product @relation(fields: [productId], references: [id])
+  purchaseLineId Int? @unique
+  purchaseLine PurchaseLine? @relation(fields: [purchaseLineId], references: [id])
+  code String
+  quantity Decimal @db.Decimal(18,3)
+  resolvedAt DateTime?
+  createdAt DateTime @default(now())
+  expiresAt DateTime?
+  @@index([productId, expiresAt])
+}
+model SupplierPayment {
+  id Int @id @default(autoincrement())
+  requestKey String @unique
+  requestHash String
+  purchaseId Int
+  purchase Purchase @relation(fields: [purchaseId], references: [id])
+  amount Decimal @db.Decimal(18,2)
+  method String
+  reference String
+  employeeId Int
+  createdAt DateTime @default(now())
 }

@@ -1,3 +1,12 @@
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public code?: string,
+  ) {
+    super(message);
+  }
+}
 export async function api<T = any>(
   url: string,
   method = "GET",
@@ -11,7 +20,11 @@ export async function api<T = any>(
   });
   const result = await response.json();
   if (!response.ok)
-    throw new Error(result.error ?? "No se pudo completar la operación");
+    throw new ApiError(
+      result.error ?? "No se pudo completar la operación",
+      response.status,
+      result.code,
+    );
   return result;
 }
 export const currency = (value: number | string | null | undefined) =>
@@ -36,6 +49,7 @@ export const today = () =>
   }).format(new Date());
 export type Employee = { id: number; name: string; role: string };
 export type Product = {
+  version: number;
   id: number;
   name: string;
   barcode: string | null;
@@ -49,6 +63,7 @@ export type Product = {
   offers: { cost: string; supplier: { name: string } }[];
 };
 export type Customer = {
+  creditUnlimited: boolean;
   id: number;
   name: string;
   phone: string;

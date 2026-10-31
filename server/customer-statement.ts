@@ -105,7 +105,7 @@ export async function customerStatement(
     const entries = movements.map((m) => {
       balance = balance.plus(m.amount);
       if (m.kind === "CARGO_FIADO") creditAdded = creditAdded.plus(m.amount);
-      else if (m.kind === "PAGO_EFECTIVO")
+      else if (m.kind.startsWith("PAGO_"))
         paymentsReceived = paymentsReceived.minus(m.amount);
       else if (m.kind === "ANULACION") reversals = reversals.minus(m.amount);
       return {
@@ -121,11 +121,13 @@ export async function customerStatement(
       customer: {
         id: customer.id,
         name: customer.name,
+        phone: customer.phone,
         creditLimit: customer.creditLimit.toString(),
+        creditUnlimited: customer.creditUnlimited,
         balance: customer.balance.toString(),
-        available: new D(customer.creditLimit)
-          .minus(customer.balance)
-          .toString(),
+        available: customer.creditUnlimited
+          ? null
+          : new D(customer.creditLimit).minus(customer.balance).toString(),
       },
       from: query.from ?? null,
       to: query.to ?? null,

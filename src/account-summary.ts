@@ -1,8 +1,13 @@
 import type { CustomerStatement } from "../shared/customer-statement";
+import { creditLimitText, availableCreditText } from "./customer-credit";
 import { currency, methodLabels, qty, when } from "./api";
 
 export const accountKind: Record<string, string> = {
   CARGO_FIADO: "Compra fiada",
+  PAGO_TRANSFERENCIA: "Pago por transferencia",
+  PAGO_MERCADO_PAGO: "Pago por Mercado Pago",
+  PAGO_DEBITO: "Pago con tarjeta",
+  DEVOLUCION: "Devoluci\u00f3n de mercader\u00eda",
   PAGO_EFECTIVO: "Pago recibido",
   ANULACION: "Anulación de fiado",
 };
@@ -14,8 +19,8 @@ export function accountStatementText(data: CustomerStatement) {
     `Período: ${data.from ?? "desde el inicio"} a ${data.to ?? "hoy"}`,
     `Emitido: ${when(data.generatedAt)}`,
     "",
-    `Límite de fiado actual: ${currency(c.creditLimit)}`,
-    `Disponible para comprar fiado: ${currency(c.available)}`,
+    `Límite de fiado actual: ${creditLimitText(c)}`,
+    `Disponible para comprar fiado: ${availableCreditText(c)}`,
     `SALDO ACTUAL A PAGAR: ${currency(c.balance)}`,
     "",
     "COMPRAS Y PRODUCTOS",

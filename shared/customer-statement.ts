@@ -29,9 +29,11 @@ export type CustomerStatement = {
   customer: {
     id: number;
     name: string;
+    phone?: string;
     creditLimit: string;
+    creditUnlimited?: boolean;
     balance: string;
-    available: string;
+    available: string | null;
   };
   from: string | null;
   to: string | null;

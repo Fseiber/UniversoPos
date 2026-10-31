@@ -1,0 +1,45 @@
+{
+  "timestamp": "2026-10-31T03:52:15.621Z",
+  "products": 5000,
+  "sales": 50000,
+  "repeats": 7,
+  "scope": "API local con supertest; no mide renderizado ni una PC antigua",
+  "results": [
+    {
+      "name": "Historial inicial",
+      "medianMs": 11,
+      "p95Ms": 18,
+      "responseBytes": 26894
+    },
+    {
+      "name": "Historial anterior",
+      "medianMs": 11,
+      "p95Ms": 15,
+      "responseBytes": 26894
+    },
+    {
+      "name": "Búsqueda por número",
+      "medianMs": 68,
+      "p95Ms": 69,
+      "responseBytes": 570
+    },
+    {
+      "name": "Catálogo 5000 productos",
+      "medianMs": 82,
+      "p95Ms": 91,
+      "responseBytes": 1127784
+    },
+    {
+      "name": "Arqueo con 50000 pagos",
+      "medianMs": 275,
+      "p95Ms": 282,
+      "responseBytes": 203
+    },
+    {
+      "name": "Resumen diario 50000 ventas",
+      "medianMs": 1152,
+      "p95Ms": 1186,
+      "responseBytes": 1013708
+    }
+  ]
+}

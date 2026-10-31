@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { creditLimitText, availableCreditText } from "./customer-credit";
+import { AuthorizationFields, formApproval } from "./authorization";
 import {
   Plus,
   Search,
@@ -20,8 +22,13 @@ import { CustomerHistory } from "./customer-history";
 import { CustomerPayment } from "./customer-payment";
 import type { CustomerStatement } from "../shared/customer-statement";
 import { BarcodeCapture } from "./barcode-capture";
+import { BulkPrices } from "./bulk-prices";
+import { CustomerReminders } from "./customer-reminders";
+import { categoryTheme } from "./category-art";
 
 export function Products() {
+  const [category, setCategory] = useState("");
+  const [bulkPrices, setBulkPrices] = useState(false);
   const [capture, setCapture] = useState(false);
   const { products, employee, task, refresh, notify, busy } = usePos();
   const [search, setSearch] = useState(""),
@@ -35,15 +42,35 @@ export function Products() {
     [margin, setMargin] = useState("30");
   const [stockMode, setStockMode] = useState("SET");
   const admin = employee.role === "ADMIN";
-  const list = products.filter((p) =>
-    `${p.name} ${p.barcode ?? ""} ${p.category}`
-      .toLowerCase()
-      .includes(search.toLowerCase()),
+  const categories = [...new Set(products.map((p) => p.category))].sort(
+    (a, b) => a.localeCompare(b, "es"),
   );
+  const list = products.filter(
+    (p) =>
+      (!category || p.category === category) &&
+      `${p.name} ${p.barcode ?? ""} ${p.category}`
+        .toLowerCase()
+        .includes(search.toLowerCase()),
+  );
+  const groups = categories
+    .map((name) => ({
+      name,
+      products: list
+        .filter((p) => p.category === name)
+        .sort(
+          (a, b) =>
+            a.name.localeCompare(b.name, "es", {
+              numeric: true,
+              sensitivity: "base",
+            }) || a.id - b.id,
+        ),
+    }))
+    .filter((g) => g.products.length);
   if (capture && admin)
     return <BarcodeCapture onBack={() => setCapture(false)} />;
   return (
     <>
+      {bulkPrices && <BulkPrices onClose={() => setBulkPrices(false)} />}
       <div className="page-heading">
         <div>
           <span className="eyebrow">CATÁLOGO E INVENTARIO</span>
@@ -52,6 +79,11 @@ export function Products() {
           </h1>
           <p>Precios claros y stock con historial de cada movimiento.</p>
         </div>
+        {admin && (
+          <button onClick={() => setBulkPrices(true)}>
+            Actualizar precios
+          </button>
+        )}
         {admin && (
           <button onClick={() => setCapture(true)}>
             Carga rápida de códigos
@@ -78,25 +110,27 @@ export function Products() {
           )}
           detail="En el mínimo o por debajo"
         />
-        <Stat
-          label="Valor del inventario"
-          value={currency(
-            products
-              .reduce(
-                (s, p) =>
-                  p.cost === null
-                    ? s
-                    : s.plus(new Decimal(p.cost).mul(p.stock)),
-                new Decimal(0),
-              )
-              .toNumber(),
-          )}
-          detail={`Valuado al costo conocido · ${products.filter((p) => p.cost === null).length} productos sin costo de compra`}
-        />
+        {admin && (
+          <Stat
+            label="Valor del inventario"
+            value={currency(
+              products
+                .reduce(
+                  (s, p) =>
+                    p.cost === null
+                      ? s
+                      : s.plus(new Decimal(p.cost).mul(p.stock)),
+                  new Decimal(0),
+                )
+                .toNumber(),
+            )}
+            detail={`Valuado al costo conocido · ${products.filter((p) => p.cost === null).length} productos sin costo de compra`}
+          />
+        )}
       </div>
       {admin && <ImportedProducts />}
       <section className="panel">
-        <div className="panel-toolbar">
+        <div className="panel-toolbar products-toolbar">
           <div className="search-box compact">
             <Search size={18} />
             <input
@@ -107,6 +141,19 @@ export function Products() {
             />
           </div>
           <span className="muted">{list.length} productos</span>
+          <Field label="Ver categoría">
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            >
+              <option value="">Todas las categorías</option>
+              {categories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </Field>
         </div>
         {list.length ? (
           <div className="table-scroll">
@@ -115,101 +162,126 @@ export function Products() {
                 <tr>
                   <th>Producto</th>
                   <th>Categoría</th>
-                  <th>Costo de compra</th>
+                  {admin && <th>Costo de compra</th>}
                   <th>Precio de venta</th>
                   <th>Stock</th>
                   <th>Acciones</th>
                 </tr>
               </thead>
-              <tbody>
-                {list.map((p) => (
-                  <tr key={p.id}>
-                    <td>
-                      <strong>{p.name}</strong>
-                      <small>
-                        {p.barcode || "Sin código de barras"} ·{" "}
-                        {p.unit === "PESO" ? "Por kilo" : "Por unidad"}
-                      </small>
-                    </td>
-                    <td>{p.category}</td>
-                    <td>
-                      {p.cost === null ? (
-                        <span className="muted">Sin cargar</span>
-                      ) : (
-                        currency(p.cost)
-                      )}
-                    </td>
-                    <td>
-                      <b>{currency(p.price)}</b>
-                      {p.rules.length > 0 && (
-                        <small>{p.rules.length} oferta(s) por cantidad</small>
-                      )}
-                    </td>
-                    <td>
-                      <span
-                        className={`badge ${Number(p.stock) <= Number(p.minimum) ? "amber" : "green"}`}
-                      >
-                        {qty(p.stock)} {p.unit === "PESO" ? "kg" : "u."}
-                      </span>
-                    </td>
-                    <td>
-                      {admin && (
-                        <div className="row-actions">
-                          <button
-                            className="icon-button"
-                            aria-label={`Editar ${p.name}`}
-                            onClick={() => {
-                              setEditing(p);
-                              setCost(p.cost ?? "");
-                            }}
-                          >
-                            <Pencil size={16} />
-                          </button>
-                          <button
-                            className="icon-button"
-                            aria-label={`Ajustar stock de ${p.name}`}
-                            onClick={() => {
-                              setStock(p);
-                              setStockMode("SET");
-                            }}
-                          >
-                            <ArrowDownToLine size={16} /> Stock
-                          </button>
-                          <button
-                            className="icon-button"
-                            aria-label={`Kardex de ${p.name}`}
-                            onClick={() =>
-                              void task(async () =>
-                                setHistory({
-                                  product: p,
-                                  rows: await api(
-                                    `/products/${p.id}/movements`,
-                                  ),
-                                }),
-                              )
-                            }
-                          >
-                            <History size={16} />
-                          </button>
-                          <button
-                            className="icon-button"
-                            aria-label={`Ofertas de ${p.name}`}
-                            onClick={() => setOffer(p)}
-                          >
-                            <Percent size={16} />
-                          </button>
-                        </div>
-                      )}
-                    </td>
+              {groups.map((group) => (
+                <tbody key={group.name}>
+                  <tr className="product-category-heading">
+                    <th
+                      colSpan={admin ? 6 : 5}
+                      scope="rowgroup"
+                      style={{
+                        backgroundColor: categoryTheme(group.name).paper,
+                        color: categoryTheme(group.name).text,
+                      }}
+                    >
+                      {group.name}{" "}
+                      <small>{group.products.length} productos</small>
+                    </th>
                   </tr>
-                ))}
-              </tbody>
+                  {group.products.map((p) => (
+                    <tr key={p.id}>
+                      <td>
+                        <strong>{p.name}</strong>
+                        <small>
+                          {p.barcode || "Sin código de barras"} ·{" "}
+                          {p.unit === "PESO" ? "Por kilo" : "Por unidad"}
+                        </small>
+                      </td>
+                      <td>{p.category}</td>
+                      {admin && (
+                        <td>
+                          {p.cost === null ? (
+                            <span className="muted">Sin cargar</span>
+                          ) : (
+                            currency(p.cost)
+                          )}
+                        </td>
+                      )}
+                      <td>
+                        <b>{currency(p.price)}</b>
+                        {p.rules.length > 0 && (
+                          <small>{p.rules.length} oferta(s) por cantidad</small>
+                        )}
+                      </td>
+                      <td>
+                        <span
+                          className={`badge ${Number(p.stock) <= Number(p.minimum) ? "amber" : "green"}`}
+                        >
+                          {qty(p.stock)} {p.unit === "PESO" ? "kg" : "u."}
+                        </span>
+                      </td>
+                      <td>
+                        {admin && (
+                          <div className="row-actions">
+                            <button
+                              className="icon-button"
+                              aria-label={`Editar ${p.name}`}
+                              onClick={() => {
+                                setEditing(p);
+                                setCost(p.cost ?? "");
+                              }}
+                            >
+                              <Pencil size={16} />
+                            </button>
+                            <button
+                              className="icon-button"
+                              aria-label={`Ajustar stock de ${p.name}`}
+                              onClick={() => {
+                                setStock(p);
+                                setStockMode("SET");
+                              }}
+                            >
+                              <ArrowDownToLine size={16} /> Stock
+                            </button>
+                            <button
+                              className="icon-button"
+                              aria-label={`Kardex de ${p.name}`}
+                              onClick={() =>
+                                void task(async () =>
+                                  setHistory({
+                                    product: p,
+                                    rows: await api(
+                                      `/products/${p.id}/movements`,
+                                    ),
+                                  }),
+                                )
+                              }
+                            >
+                              <History size={16} />
+                            </button>
+                            <button
+                              className="icon-button"
+                              aria-label={`Ofertas de ${p.name}`}
+                              onClick={() => setOffer(p)}
+                            >
+                              <Percent size={16} />
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              ))}
             </table>
           </div>
         ) : (
           <Empty
-            title="Todavía no hay productos"
-            text="Cargá tu primer producto con precio y stock inicial."
+            title={
+              products.length
+                ? "No hay productos con estos filtros"
+                : "Todavía no hay productos"
+            }
+            text={
+              products.length
+                ? "Probá otra categoría o cambiá la búsqueda."
+                : "Cargá tu primer producto con precio y stock inicial."
+            }
           />
         )}
       </section>
@@ -229,7 +301,10 @@ export function Products() {
                 await api(
                   editing === "new" ? "/products" : `/products/${editing.id}`,
                   editing === "new" ? "POST" : "PUT",
-                  f,
+                  {
+                    ...f,
+                    ...(editing !== "new" ? { version: editing.version } : {}),
+                  },
                 );
                 setEditing(null);
                 await refresh();
@@ -530,11 +605,17 @@ export function Products() {
 }
 
 export function Customers() {
+  const [unlimited, setUnlimited] = useState(false);
+  const [reminders, setReminders] = useState<Customer | null>(null);
   const { customers, employee, shift, task, refresh, notify, busy } = usePos();
   const [search, setSearch] = useState(""),
     [editing, setEditing] = useState<Customer | "new" | null>(null),
     [payment, setPayment] = useState<Customer | null>(null),
     [history, setHistory] = useState<CustomerStatement | null>(null);
+  useEffect(
+    () => setUnlimited(editing !== "new" && Boolean(editing?.creditUnlimited)),
+    [editing],
+  );
   const total = customers.reduce((s, c) => s.plus(c.balance), new Decimal(0));
   return (
     <>
@@ -597,14 +678,8 @@ export function Customers() {
                       <td>
                         <strong>{c.name}</strong>
                       </td>
-                      <td>{currency(c.creditLimit)}</td>
-                      <td>
-                        {currency(
-                          new Decimal(c.creditLimit)
-                            .minus(c.balance)
-                            .toNumber(),
-                        )}
-                      </td>
+                      <td>{creditLimitText(c)}</td>
+                      <td>{availableCreditText(c)}</td>
                       <td>
                         <b
                           className={
@@ -636,6 +711,7 @@ export function Customers() {
                           >
                             <History size={17} /> Compras y pagos
                           </button>
+                          <button onClick={() => setReminders(c)}>Notas</button>
                           {employee.role === "ADMIN" && (
                             <button
                               className="icon-button"
@@ -672,7 +748,16 @@ export function Customers() {
                 await api(
                   editing === "new" ? "/customers" : `/customers/${editing.id}`,
                   editing === "new" ? "POST" : "PATCH",
-                  data,
+                  {
+                    ...data,
+                    creditUnlimited: unlimited,
+                    ...(unlimited
+                      ? {
+                          creditLimit:
+                            editing === "new" ? 0 : editing.creditLimit,
+                        }
+                      : {}),
+                  },
                 );
                 setEditing(null);
                 await refresh();
@@ -697,11 +782,21 @@ export function Customers() {
                 defaultValue={editing === "new" ? "" : editing.phone}
               />
             </Field>
-            <Field label="Límite de crédito">
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={unlimited}
+                disabled={employee.role !== "ADMIN"}
+                onChange={(e) => setUnlimited(e.target.checked)}
+              />{" "}
+              Sin límite de fiado
+            </label>
+            <Field label="Límite de fiado">
               <NumberInput
                 name="creditLimit"
                 defaultValue={editing === "new" ? 0 : editing.creditLimit}
                 readOnly={employee.role !== "ADMIN"}
+                disabled={unlimited}
               />
             </Field>
             {employee.role !== "ADMIN" && (
@@ -721,12 +816,21 @@ export function Customers() {
       {history && (
         <CustomerHistory initial={history} onClose={() => setHistory(null)} />
       )}
+      {reminders && (
+        <Modal
+          title={`Notas · ${reminders.name}`}
+          onClose={() => setReminders(null)}
+        >
+          <CustomerReminders customerId={reminders.id} />
+        </Modal>
+      )}
     </>
   );
 }
 
 export function Cash() {
-  const { shift, task, refresh, notify, busy } = usePos();
+  const { employee, shift, task, refresh, notify, busy } = usePos();
+  const [approval, setApproval] = useState<any>();
   const [modal, setModal] = useState<
       "open" | "close" | "movement" | "withdrawal" | null
     >(null),
@@ -769,7 +873,11 @@ export function Cash() {
           <div className="stats three">
             <Stat
               label="Efectivo esperado"
-              value={currency(shift.expected)}
+              value={
+                employee.role === "ADMIN"
+                  ? currency(shift.expected)
+                  : "Conteo a ciegas"
+              }
               detail="Incluye cobros de deuda y movimientos"
             />
             <Stat label="Fondo de apertura" value={currency(shift.opening)} />
@@ -875,10 +983,12 @@ export function Cash() {
             Contá el dinero físico de caja. Las ventas pendientes y fiadas no
             forman parte del efectivo.
           </p>
-          <div className="payment-total">
-            <small>EFECTIVO ESPERADO</small>
-            <strong>{currency(shift.expected)}</strong>
-          </div>
+          {employee.role === "ADMIN" && (
+            <div className="payment-total">
+              <small>EFECTIVO ESPERADO</small>
+              <strong>{currency(shift.expected)}</strong>
+            </div>
+          )}
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -898,7 +1008,7 @@ export function Cash() {
                 autoFocus
               />
             </Field>
-            {declared !== "" && (
+            {employee.role === "ADMIN" && declared !== "" && (
               <div className="notice">
                 Diferencia:{" "}
                 {currency(
@@ -947,7 +1057,10 @@ export function Cash() {
               e.preventDefault();
               const data = Object.fromEntries(new FormData(e.currentTarget));
               void task(async () => {
-                await api("/cash-movements", "POST", data);
+                await api("/cash-movements", "POST", {
+                  ...data,
+                  approval: formApproval(data),
+                });
                 setModal(null);
                 await refresh();
                 notify("Movimiento de caja registrado");
@@ -963,6 +1076,14 @@ export function Cash() {
             <Field label="Importe">
               <NumberInput name="amount" min="0.01" />
             </Field>
+            <Field label="Clasificar movimiento">
+              <select name="category">
+                <option value="SIN_CLASIFICAR">Sin clasificar</option>
+                <option value="GASTO">Gasto del negocio</option>
+                <option value="RETIRO_DUENO">Retiro del dueño</option>
+                <option value="INGRESO">Ingreso / aporte</option>
+              </select>
+            </Field>
             <Field label="Motivo">
               <input
                 name="reason"
@@ -972,6 +1093,7 @@ export function Cash() {
                 required
               />
             </Field>
+            {employee.role !== "ADMIN" && <AuthorizationFields />}
             <button className="primary full" disabled={busy}>
               Registrar movimiento
             </button>
@@ -991,7 +1113,10 @@ export function Cash() {
             onSubmit={(e) => {
               e.preventDefault();
               void task(async () => {
-                const result = await api("/withdrawals", "POST", withdrawal);
+                const result = await api("/withdrawals", "POST", {
+                  ...withdrawal,
+                  approval,
+                });
                 setModal(null);
                 await refresh();
                 notify(
@@ -1078,6 +1203,9 @@ export function Cash() {
                         .toNumber(),
                     )}`}
               </div>
+            )}
+            {employee.role !== "ADMIN" && (
+              <AuthorizationFields onChange={setApproval} />
             )}
             <button className="primary full" disabled={busy}>
               Registrar entrega

@@ -1,5 +1,9 @@
 # El Universo POS
 
+Los ajustes de stock en el encabezado, fiado sin límite, notas, auditoría y ventas pendientes se explican en [Ajustes del mostrador](docs/AJUSTES-MOSTRADOR.md).
+
+Las mejoras de permisos, trabajo entre equipos, recuperación y gestión comercial están documentadas en [las cuatro etapas](docs/CUATRO-ETAPAS.md).
+
 Punto de venta local para el comercio. React + Vite + TypeScript, Express, Prisma y PostgreSQL. Interfaz en español y moneda argentina.
 
 ## Iniciar en esta computadora
@@ -86,6 +90,34 @@ Si el servidor estaba abierto durante esta actualización, detenelo con Ctrl+C, 
 El acceso desde celular tiene interfaz responsive y permisos ADMIN para gestión. Acceso fuera del comercio, HTTPS/VPN y puesta en marcha automática de Windows se configuran en el entorno real. No abras puertos del router para usar esta versión sin esa configuración.
 
 ## Ajustes de uso diario
+
+### Consolidación por etapas
+
+Historial paginado y búsqueda completa; asistente de precios por categoría con
+vista previa y confirmación; devoluciones parciales con PIN y comprobante;
+notas vinculadas y envases por cliente; segunda copia verificada y medición con
+5.000 productos / 50.000 ventas. Ver [uso, pruebas y límites](docs/CONSOLIDACION.md).
+
+### Notas y clasificación
+
+La sección **Notas** guarda título, detalle, autor y fecha/hora de creación. Todos
+los empleados con sesión pueden consultar y actualizar las notas compartidas,
+marcarlas como resueltas o volverlas a pendiente. Las ediciones conservan la fecha
+original, registran la actualización y dejan auditoría. Incluye búsqueda y carga de
+notas anteriores; un cambio simultáneo avisa antes de sobrescribir otra edición.
+
+El catálogo activo fue clasificado por familias comerciales, disponibles en los
+filtros del mostrador y en el selector de categoría al editar productos. La
+clasificación por nombre puede ajustarse manualmente; no altera precios ni stock.
+
+### Venta con o sin stock
+
+En Punto de venta, el administrador puede pulsar **Activar venta sin stock** para
+cobrar todos los productos activos sin exigir ni descontar existencias. El modo
+se comparte entre equipos y se conserva al reiniciar. **Volver al modo stock**
+restablece el control para las ventas siguientes; no descuenta retroactivamente
+lo vendido antes. El historial identifica las ventas sin control y las anulaciones
+respetan el modo original. Conviene cargar el conteo real antes de volver al stock.
 
 ### Clientes y fiados
 

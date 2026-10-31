@@ -12,6 +12,10 @@ const time = (value: string) =>
   });
 const labels: Record<string, string> = {
   CARGO_FIADO: "Compra fiada",
+  PAGO_TRANSFERENCIA: "Pago por transferencia",
+  PAGO_MERCADO_PAGO: "Pago por Mercado Pago",
+  PAGO_DEBITO: "Pago con tarjeta",
+  DEVOLUCION: "Devoluci\u00f3n de mercader\u00eda",
   PAGO_EFECTIVO: "Pago recibido",
   ANULACION: "Anulación de fiado",
   EFECTIVO: "Efectivo",
@@ -61,8 +65,12 @@ export function customerStatementPdf(data: CustomerStatement): Promise<Buffer> {
     );
     line(`Emitido: ${time(data.generatedAt)} (Argentina)`, false, 9);
     section("Estado actual de la cuenta");
-    line(`Límite de fiado: ${cash(data.customer.creditLimit)}`);
-    line(`Disponible para comprar fiado: ${cash(data.customer.available)}`);
+    line(
+      `Límite de fiado: ${data.customer.creditUnlimited ? "Sin límite" : cash(data.customer.creditLimit)}`,
+    );
+    line(
+      `Disponible para comprar fiado: ${data.customer.creditUnlimited ? "Sin límite" : cash(data.customer.available ?? "0")}`,
+    );
     line(`SALDO ACTUAL A PAGAR: ${cash(data.customer.balance)}`, true, 13);
     section("Compras y productos");
     if (!data.purchases.length) line("Sin compras en el período.");

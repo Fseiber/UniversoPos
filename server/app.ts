@@ -1,4 +1,12 @@
+import { commerce, collectDebt } from "./commerce.js";
 import express from "express";
+import { authorizeException, employeeView } from "./employee-policy.js";
+import { history } from "./history.js";
+import { priceChanges } from "./price-changes.js";
+import { returns } from "./returns.js";
+import { customerReminders } from "./customer-reminders.js";
+import { notes } from "./notes.js";
+import { stockSettings } from "./stock-mode.js";
 import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
 import { z, ZodError } from "zod";
@@ -55,7 +63,16 @@ const publicEmployee = (e: { id: number; name: string; role: string }) => ({
   name: e.name,
   role: e.role,
 });
-app.get("/api/health", (_req, res) => res.json({ ok: true }));
+app.get("/api/health", async (_req, res) => {
+  try {
+    await db.$queryRaw`SELECT 1`;
+    res.json({ ok: true, checkedAt: new Date().toISOString() });
+  } catch {
+    res
+      .status(503)
+      .json({ ok: false, error: "Sin conexión con la base de datos" });
+  }
+});
 app.get("/api/bootstrap", async (_req, res) => {
   const employees = await db.employee.findMany({
     where: { active: true },
@@ -110,6 +127,46 @@ app.post("/api/login", loginLimit, async (req, res) => {
   res.json(publicEmployee(employee));
 });
 app.use("/api", authenticate);
+app.use("/api", (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  if (res.locals.employee.role !== "ADMIN") {
+    const json = res.json.bind(res);
+    res.json = (body) => json(employeeView(body));
+  }
+  next();
+});
+app.get("/api/settings/employees", async (_req, res) => {
+  const settings = await db.posSettings.findUnique({ where: { id: 1 } });
+  res.json({
+    employeeSurchargeLimit: settings?.employeeSurchargeLimit ?? 0,
+    employeeMovementLimit: settings?.employeeMovementLimit ?? 0,
+  });
+});
+app.put("/api/settings/employees", admin, async (req, res) => {
+  const data = z
+    .object({
+      employeeSurchargeLimit: money.refine((v) => v <= 100),
+      employeeMovementLimit: money,
+    })
+    .parse(req.body);
+  const result = await transaction(async (tx) => {
+    const old = await tx.posSettings.findUnique({ where: { id: 1 } });
+    const settings = await tx.posSettings.upsert({
+      where: { id: 1 },
+      create: { id: 1, ...data },
+      update: data,
+    });
+    await audit(
+      tx,
+      res.locals.employee.id,
+      "POLITICA_EMPLEADOS",
+      "configuracion",
+      { old, ...data },
+    );
+    return settings;
+  });
+  res.json(result);
+});
 app.get("/api/me", (_req, res) =>
   res.json(publicEmployee(res.locals.employee)),
 );
@@ -209,6 +266,39 @@ const productInput = z.object({
     .refine((v) => new D(v).decimalPlaces() <= 3)
     .default(0),
 });
+app.get("/api/settings/stock", async (_req, res) =>
+  res.json(await stockSettings()),
+);
+app.put("/api/settings/stock", admin, async (req, res) => {
+  const data = z
+    .object({
+      stockEnabled: z.boolean(),
+      expectedVersion: z.number().int().nonnegative(),
+    })
+    .parse(req.body);
+  const result = await transaction(async (tx) => {
+    const old = await stockSettings(tx);
+    ensure(
+      old.version === data.expectedVersion,
+      "El modo cambió en otro equipo. Actualizá antes de cambiarlo",
+      409,
+    );
+    const settings = await tx.posSettings.upsert({
+      where: { id: 1 },
+      create: { id: 1, stockEnabled: data.stockEnabled, version: 1 },
+      update: { stockEnabled: data.stockEnabled, version: { increment: 1 } },
+    });
+    await audit(
+      tx,
+      res.locals.employee.id,
+      "CAMBIAR_MODO_STOCK",
+      "configuracion",
+      { previous: old.stockEnabled, stockEnabled: settings.stockEnabled },
+    );
+    return settings;
+  });
+  res.json(result);
+});
 app.get("/api/products", async (_req, res) =>
   res.json(
     await db.product.findMany({
@@ -284,11 +374,18 @@ app.post("/api/imported-products/:id/activate", admin, async (req, res) => {
 });
 app.put("/api/products/:id", admin, async (req, res) => {
   const productId = id.parse(req.params.id);
-  const data = productInput.parse(req.body);
+  const data = productInput
+    .extend({ version: z.number().int().nonnegative() })
+    .parse(req.body);
   await transaction(async (tx) => {
     const old = await tx.product.findUniqueOrThrow({
       where: { id: productId },
     });
+    ensure(
+      old.version === data.version,
+      "Este producto cambió en otro equipo. Cerrá y volvé a abrir la ficha antes de guardar",
+      409,
+    );
     await ensureBarcodeAvailable(tx, data.barcode, {
       kind: "PRODUCT",
       id: productId,
@@ -349,6 +446,9 @@ app.post("/api/products/:id/stock", admin, async (req, res) => {
             .refine((v) => new D(v).decimalPlaces() <= 3),
         ),
       reason: z.string().trim().min(3).max(160),
+      category: z
+        .enum(["GASTO", "RETIRO_DUENO", "INGRESO", "SIN_CLASIFICAR"])
+        .default("SIN_CLASIFICAR"),
     })
     .parse(req.body);
   await transaction(async (tx) => {
@@ -402,10 +502,12 @@ app.post("/api/customers", async (req, res) => {
       name: z.string().trim().min(2).max(100),
       phone: z.string().max(40).default(""),
       creditLimit: money,
+      creditUnlimited: z.boolean().default(false),
     })
     .parse(req.body);
   ensure(
-    res.locals.employee.role === "ADMIN" || data.creditLimit === 0,
+    res.locals.employee.role === "ADMIN" ||
+      (data.creditLimit === 0 && !data.creditUnlimited),
     "El administrador debe asignar el límite de crédito",
     403,
   );
@@ -428,6 +530,7 @@ app.patch("/api/customers/:id", admin, async (req, res) => {
       name: z.string().trim().min(2).max(100),
       phone: z.string().max(40),
       creditLimit: money,
+      creditUnlimited: z.boolean().optional(),
     })
     .parse(req.body);
   const customerId = id.parse(req.params.id);
@@ -436,7 +539,8 @@ app.patch("/api/customers/:id", admin, async (req, res) => {
       where: { id: customerId },
     });
     ensure(
-      new D(data.creditLimit).gte(c.balance),
+      (data.creditUnlimited ?? c.creditUnlimited) ||
+        new D(data.creditLimit).gte(c.balance),
       "El límite no puede quedar por debajo de la deuda actual",
     );
     await tx.customer.update({ where: { id: customerId }, data });
@@ -483,37 +587,15 @@ app.get("/api/customers/:id/statement.pdf", async (req, res) => {
   res.send(await customerStatementPdf(data));
 });
 app.post("/api/customers/:id/payments", async (req, res) => {
-  const customerId = id.parse(req.params.id);
-  const data = z.object({ amount: money.refine((v) => v > 0) }).parse(req.body);
-  await transaction(async (tx) => {
-    const shift = await currentShift(tx);
-    const customer = await tx.customer.findUniqueOrThrow({
-      where: { id: customerId },
-    });
-    ensure(new D(data.amount).lte(customer.balance), "El pago supera la deuda");
-    await tx.customer.update({
-      where: { id: customerId },
-      data: { balance: new D(customer.balance).minus(data.amount) },
-    });
-    await tx.accountMovement.create({
-      data: {
-        customerId,
-        amount: new D(data.amount).neg(),
-        kind: "PAGO_EFECTIVO",
-        shiftId: shift.id,
-        employeeId: res.locals.employee.id,
-      },
-    });
-    await audit(
-      tx,
+  res.json(
+    await collectDebt(
+      id.parse(req.params.id),
+      req.body,
       res.locals.employee.id,
-      "COBRO_DEUDA",
-      `cliente:${customerId}`,
-      data,
-    );
-  });
-  res.json({ ok: true });
+    ),
+  );
 });
+app.use("/api/commerce", commerce);
 app.get("/api/shift", async (_req, res) => {
   const shift = await db.shift.findFirst({
     where: { closedAt: null },
@@ -523,7 +605,10 @@ app.get("/api/shift", async (_req, res) => {
     shift
       ? {
           ...shift,
-          expected: await transaction((tx) => expectedCash(tx, shift.id)),
+          expected:
+            res.locals.employee.role === "ADMIN"
+              ? await transaction((tx) => expectedCash(tx, shift.id))
+              : null,
         }
       : null,
   );
@@ -584,8 +669,24 @@ app.post("/api/cash-movements", async (req, res) => {
       amount: money.refine((v) => v > 0),
       direction: z.enum(["INGRESO", "RETIRO"]),
       reason: z.string().trim().min(3).max(160),
+      category: z
+        .enum(["GASTO", "RETIRO_DUENO", "INGRESO", "SIN_CLASIFICAR"])
+        .default("SIN_CLASIFICAR"),
     })
     .parse(req.body);
+  await authorizeException(
+    res.locals.employee,
+    "movement",
+    data.amount,
+    req.body.approval,
+  );
+  ensure(
+    data.category === "SIN_CLASIFICAR" ||
+      (data.direction === "INGRESO"
+        ? data.category === "INGRESO"
+        : data.category !== "INGRESO"),
+    "La clasificación no corresponde al tipo de movimiento",
+  );
   await transaction(async (tx) => {
     const shift = await currentShift(tx);
     const amount = new D(data.amount).mul(
@@ -599,6 +700,7 @@ app.post("/api/cash-movements", async (req, res) => {
       data: {
         shiftId: shift.id,
         amount,
+        category: data.category,
         reason: data.reason,
         employeeId: res.locals.employee.id,
       },
@@ -613,6 +715,20 @@ app.post("/api/cash-movements", async (req, res) => {
   });
   res.json({ ok: true });
 });
+app.use("/api/sales", returns);
+app.use("/api/sales/history", history);
+app.get("/api/sales/pending-summary", async (_req, res) => {
+  const day = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "America/Argentina/Buenos_Aires",
+  }).format(new Date());
+  const start = new Date(`${day}T00:00:00-03:00`),
+    end = new Date(start.getTime() + 86400000);
+  res.json({
+    today: await db.sale.count({
+      where: { status: "PENDIENTE", createdAt: { gte: start, lt: end } },
+    }),
+  });
+});
 app.get("/api/sales", async (req, res) => {
   const pending = req.query.pending === "true";
   res.json(
@@ -621,7 +737,7 @@ app.get("/api/sales", async (req, res) => {
       include: {
         lines: true,
         payments: true,
-        customer: { select: { name: true } },
+        customer: { select: { name: true, phone: true } },
         employee: { select: { name: true } },
       },
       orderBy: { id: "desc" },
@@ -629,11 +745,45 @@ app.get("/api/sales", async (req, res) => {
     }),
   );
 });
-app.post("/api/sales", async (req, res) =>
-  res
-    .status(201)
-    .json(await createSale(saleInput.parse(req.body), res.locals.employee.id)),
-);
+app.post("/api/sales", async (req, res) => {
+  const data = saleInput.parse(req.body);
+  if (!(await db.sale.findUnique({ where: { requestKey: data.requestKey } })))
+    await authorizeException(
+      res.locals.employee,
+      "surcharge",
+      data.surchargePercent,
+      req.body.approval,
+    );
+  const sale = await createSale(data, res.locals.employee.id);
+  res.status(201).json({
+    ...sale,
+    employee: { name: res.locals.employee.name },
+    customer: sale.customerId
+      ? await db.customer.findUnique({
+          where: { id: sale.customerId },
+          select: { name: true, phone: true },
+        })
+      : null,
+  });
+});
+app.get("/api/sales/by-request/:key", async (req, res) => {
+  const requestKey = z.string().uuid().parse(req.params.key);
+  const sale = await db.sale.findUnique({
+    where: { requestKey },
+    include: {
+      lines: true,
+      payments: true,
+      employee: { select: { name: true } },
+      customer: { select: { name: true, phone: true } },
+    },
+  });
+  ensure(
+    sale,
+    "La venta aún no figura registrada. Conservá el carrito y reintentá la misma operación",
+    404,
+  );
+  res.json(sale);
+});
 app.post("/api/sales/:id/settle", async (req, res) => {
   const data = z
     .object({
@@ -711,6 +861,9 @@ app.post("/api/barcodes", admin, async (req, res) =>
   res.json(await saveBarcode(req.body, res.locals.employee.id)),
 );
 
+app.use("/api/customers", customerReminders);
+app.use("/api/price-changes", priceChanges);
+app.use("/api/notes", notes);
 app.use("/api", management);
 app.use("/api", (_req, res) =>
   res.status(404).json({ error: "Ruta no encontrada" }),
@@ -732,12 +885,10 @@ app.use(
       });
     const code = (error as { code?: string })?.code;
     if (code === "P2034")
-      return res
-        .status(409)
-        .json({
-          error:
-            "Otra caja actualizó estos datos al mismo tiempo. Volvé a intentar; esta operación no se guardó",
-        });
+      return res.status(409).json({
+        error:
+          "Otra caja actualizó estos datos al mismo tiempo. Volvé a intentar; esta operación no se guardó",
+      });
     if (code === "P2002")
       return res
         .status(409)

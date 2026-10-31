@@ -1,5 +1,26 @@
 # Operación y recuperación
 
+## Vender sin control de stock
+
+En Punto de venta, un administrador puede pulsar **Activar venta sin stock**.
+El cambio se guarda en PostgreSQL y aplica a todos los equipos; los empleados
+pueden vender en ese modo, pero no cambiarlo. El aviso del mostrador identifica
+el modo actual y se consulta periódicamente o al volver a enfocar la ventana.
+
+Sin control de stock se pueden vender los productos activos aunque tengan cero
+existencias. Se registran productos, cantidades, precios, cobros y fiados, pero
+no se exige stock suficiente ni se crean movimientos de stock por esas ventas.
+Las cantidades por unidad o peso siguen validándose. Los importados pendientes
+de revisión no se habilitan automáticamente, porque todavía requieren precio.
+Los ajustes manuales de stock siguen disponibles para preparar el inventario.
+
+Para volver, pulsar **Volver al modo stock**. Las ventas siguientes vuelven a
+validar y descontar existencias. Las anteriores no se descuentan retroactivamente:
+primero conviene cargar el conteo real. Cada venta conserva su modo original;
+su anulación repone stock únicamente si esa venta lo había descontado. Saldar
+una pendiente tampoco agrega un descuento de stock, aunque el modo haya cambiado.
+El modo inicial permanece con control de stock.
+
 ## Apertura y cierre
 
 El sistema permite un turno abierto para el comercio. Cualquier empleado activo puede operar ese turno y cada venta/movimiento conserva su autor. El efectivo esperado es fondo inicial + ventas en efectivo + cobros de deuda en efectivo + ingresos manuales - retiros y reembolsos. No incluye fiados ni cobros digitales.

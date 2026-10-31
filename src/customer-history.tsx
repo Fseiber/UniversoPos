@@ -1,3 +1,5 @@
+import { whatsappLink } from "./whatsapp";
+import { creditLimitText, availableCreditText } from "./customer-credit";
 import { useState } from "react";
 import { Copy, Printer, Send } from "lucide-react";
 import { api, currency, methodLabels, qty, when } from "./api";
@@ -81,13 +83,10 @@ export function CustomerHistory({
         </button>
       </form>
       <div className="stats three account-stats">
-        <Stat
-          label="Límite de fiado"
-          value={currency(data.customer.creditLimit)}
-        />
+        <Stat label="Límite de fiado" value={creditLimitText(data.customer)} />
         <Stat
           label="Disponible para comprar"
-          value={currency(data.customer.available)}
+          value={availableCreditText(data.customer)}
         />
         <Stat
           label="Saldo actual a pagar"
@@ -119,7 +118,10 @@ export function CustomerHistory({
             className="button"
             target="_blank"
             rel="noreferrer"
-            href={`https://wa.me/?text=${encoded}`}
+            href={whatsappLink(
+              decodeURIComponent(encoded),
+              data.customer.phone,
+            )}
           >
             <Send size={17} /> Preparar WhatsApp
           </a>

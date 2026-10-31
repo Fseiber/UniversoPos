@@ -73,11 +73,12 @@ export function buildReportPdf(data: Report): Promise<Buffer> {
         `Período: ${data.from} al ${data.to} | Zona horaria: Argentina (UTC-3)`,
       );
     section("Actividad del período");
-    row("Ventas registradas (sin anuladas)", money(data.total), true);
+    row("Ventas netas de devoluciones (sin anuladas)", money(data.total), true);
+    row("Devoluciones del período", money(data.returnedAmount));
     row("Cantidad de ventas", String(data.salesCount));
     row("Pendientes de cobro del período", money(data.pending));
     row(
-      Number(data.unknownCostRevenue) > 0
+      data.hasUnknownCosts
         ? "Margen parcial (costos conocidos)"
         : "Margen estimado sobre costo histórico",
       money(data.margin),
@@ -95,7 +96,36 @@ export function buildReportPdf(data: Report): Promise<Buffer> {
     };
     for (const [method, amount] of Object.entries(data.byMethod))
       row(labels[method] ?? method, money(amount));
-    row("Cobros de deudas en efectivo", money(data.debtCollections));
+    row("Cobros de deudas (todos los medios)", money(data.debtCollections));
+    for (const c of data.debtCollectionsByMethod)
+      row(`Fiados cobrados: ${labels[c.name] ?? c.name}`, money(c.amount));
+    section("Inventario y gastos registrados");
+    row("Inventario al costo conocido", money(data.inventoryValue));
+    row(
+      "Productos con costo / activos",
+      `${data.inventoryCostCoverage.known} / ${data.inventoryCostCoverage.total}`,
+    );
+    row("Gastos de caja clasificados", money(data.expenses));
+    row("Salidas sin clasificar", money(data.unclassifiedOutflows));
+    row(
+      "Margen conocido menos gastos registrados (parcial)",
+      money(data.margin.minus(data.expenses)),
+    );
+    for (const [title, entries] of [
+      ["Ventas netas por cajero", data.byEmployee],
+      ["Ventas netas por hora - Argentina", data.byHour],
+      ["Productos por categoría - sin recargos", data.byCategory],
+      ["Deuda actual con proveedores", data.supplierDebt],
+    ] as const) {
+      section(title);
+      for (const entry of entries) row(entry.name, money(entry.amount));
+    }
+    section("Antigüedad de fiados - saldos actuales");
+    for (const c of data.debtAging)
+      row(`${c.name} - ${c.days ?? "?"} días`, money(c.balance));
+    section("Productos sin ventas en el período");
+    for (const p of data.noSalesInPeriod)
+      row(p.name, `Stock ${p.stock.toString()}`);
     section("Cuentas corrientes - saldos actuales");
     row("Total adeudado actual", money(data.totalDebt), true);
     for (const c of data.customers) row(c.name, money(c.balance));

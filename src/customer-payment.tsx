@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Decimal from "decimal.js";
+import { creditLimitText, availableCreditText } from "./customer-credit";
 import { api, currency, type Customer } from "./api";
 import { usePos } from "./context";
 import { Field, Modal, NumberInput } from "./components";
@@ -12,6 +13,10 @@ export function CustomerPayment({
   onClose: () => void;
 }) {
   const { task, refresh, notify, busy } = usePos();
+  const [requestKey] = useState(() => crypto.randomUUID());
+  const [method, setMethod] = useState("EFECTIVO"),
+    [reference, setReference] = useState(""),
+    [confirmed, setConfirmed] = useState(false);
   const [mode, setMode] = useState("FULL"),
     [amount, setAmount] = useState(customer.balance);
   const value = new Decimal(amount || 0),
@@ -23,33 +28,74 @@ export function CustomerPayment({
       <div className="account-credit-strip">
         <div>
           <small>Límite de fiado</small>
-          <strong>{currency(customer.creditLimit)}</strong>
+          <strong>{creditLimitText(customer)}</strong>
         </div>
         <div>
           <small>Disponible para comprar</small>
-          <strong>
-            {currency(
-              new Decimal(customer.creditLimit).minus(balance).toString(),
-            )}
-          </strong>
+          <strong>{availableCreditText(customer)}</strong>
         </div>
       </div>
       <div className="payment-total">
         <small>SALDO QUE EL CLIENTE TIENE QUE PAGAR</small>
         <strong>{currency(customer.balance)}</strong>
       </div>
-      <p>Cobro en efectivo: elegí pago total o entrega parcial.</p>
+      <p>
+        Elegí el medio y pago total o entrega parcial. Para pagos digitales,
+        verificá primero la acreditación.
+      </p>
       <form
         onSubmit={(e) => {
           e.preventDefault();
           void task(async () => {
-            await api(`/customers/${customer.id}/payments`, "POST", { amount });
+            await api(`/customers/${customer.id}/payments`, "POST", {
+              requestKey,
+              amount,
+              method,
+              reference,
+              confirmed,
+            });
             onClose();
             await refresh();
             notify(`Pago de ${currency(amount)} registrado en cuenta y caja`);
           });
         }}
       >
+        <Field label="Medio de pago">
+          <select
+            value={method}
+            onChange={(e) => {
+              setMethod(e.target.value);
+              setConfirmed(false);
+            }}
+          >
+            <option value="EFECTIVO">Efectivo</option>
+            <option value="TRANSFERENCIA">Transferencia</option>
+            <option value="MERCADO_PAGO">Mercado Pago</option>
+            <option value="DEBITO">Débito / Posnet</option>
+          </select>
+        </Field>
+        {method !== "EFECTIVO" && (
+          <>
+            <Field label="Referencia del comprobante">
+              <input
+                minLength={3}
+                maxLength={120}
+                required
+                value={reference}
+                onChange={(e) => setReference(e.target.value)}
+              />
+            </Field>
+            <label>
+              <input
+                type="checkbox"
+                required
+                checked={confirmed}
+                onChange={(e) => setConfirmed(e.target.checked)}
+              />{" "}
+              Verifiqué que el pago está acreditado
+            </label>
+          </>
+        )}
         <Field label="Qué va a pagar">
           <select
             value={mode}
@@ -84,11 +130,7 @@ export function CustomerPayment({
             </div>
             <div>
               <span>Disponible para comprar fiado</span>
-              <b>
-                {currency(
-                  new Decimal(customer.creditLimit).minus(remaining).toString(),
-                )}
-              </b>
+              <b>{availableCreditText(customer, remaining.toString())}</b>
             </div>
           </div>
         )}
